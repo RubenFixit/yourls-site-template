@@ -84,7 +84,8 @@ deploy_host:
 deploy_user:
   type: str
   help: SSH user on the deploy host (the shell user that owns the web directory)
-  default: ""
+  # No default on purpose: Copier validates defaults, and an empty default would fail
+  # the validator below as soon as deploy_host is set (crashing the prompt).
   when: "{{ deploy_host != '' }}"
   validator: >-
     {% if deploy_host and not (deploy_user | regex_search('^[A-Za-z0-9._-]+$')) %}deploy_user is required when deploy_host is set{% endif %}

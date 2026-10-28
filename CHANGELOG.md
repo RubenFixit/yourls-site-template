@@ -5,7 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-28
+
+### Fixed
+- Setting a deploy host crashed the interactive prompt (`Validation error for question
+  'deploy_user'`): the empty default for `deploy_user` failed its own validator. The question
+  now has no default and is asked whenever a deploy host is given. CI checks this.
+
 ### Changed
+- New sites pin yourls-manager `v0.2.0` by default.
 - Docs for yourls-manager v0.2 onboarding commands. The README now points to yourls-manager
   for all instructions and keeps only maintainer notes.
 - Post-copy message is short and correct both via `ym new` and raw Copier. It points to

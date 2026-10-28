@@ -60,3 +60,30 @@ jobs:
           uvx copier update --defaults --vcs-ref HEAD
           git status --porcelain
           test -z "$(git status --porcelain)"
+
+  question-defaults:
+    # Copier validates a question's default before prompting; a default that fails its
+    # own validator crashes the interactive prompt. Answering deploy_host without
+    # deploy_user must ask for the user (here: fail cleanly as "required"), not crash.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.2
+
+      - name: deploy_host without deploy_user asks instead of crashing
+        run: |
+          set +e
+          out=$(uvx copier copy --defaults --vcs-ref HEAD \
+            --data site_name=Check --data site_url=https://go.example.com \
+            --data deploy_host=example.dreamhost.com \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/site" 2>&1)
+          rc=$?
+          set -e
+          echo "$out" | tail -n 3
+          test "$rc" -ne 0
+          echo "$out" | grep -q 'Question "deploy_user" is required'
+          ! echo "$out" | grep -q 'Validation error'
