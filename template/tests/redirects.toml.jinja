@@ -1,0 +1,42 @@
+# Redirect expectations checked by `uv run ym verify <target>` (and at the end of
+# `ym deploy`). Site-owned: `copier update` never overwrites this file.
+#
+# Each [[case]]:
+#   path     = requested path, relative to the target url (required)
+#   status   = expected HTTP status: 301 / 302 / 404 / 200, or a list such as [301, 302]
+#   location = optional expected Location header; exact match, or prefix match
+#              when it ends with "*"
+#
+# Add a case for every short URL that matters, e.g.
+#
+# [[case]]
+# path = "/docs"
+# status = [301, 302]
+# location = "https://example.com/documentation"
+#
+# The site root: YOURLS ships no index page. If you add overlay/index.php that
+# redirects somewhere, assert it here:
+#
+# [[case]]
+# path = "/"
+# status = [301, 302]
+# location = "https://example.com/*"
+
+# Admin login page is reachable (YOURLS_PRIVATE = true shows the login form).
+[[case]]
+path = "/admin/"
+status = 200
+
+{% if include_example_plugins -%}
+# Unknown keyword -> 404 (404-if-not-found plugin).
+[[case]]
+path = "/this-keyword-should-not-exist-{{ site_slug }}"
+status = 404
+{%- else -%}
+# Unknown keyword -> YOURLS redirects to YOURLS_SITE with a 302.
+# (Install the 404-if-not-found plugin to get a 404 instead.)
+[[case]]
+path = "/this-keyword-should-not-exist-{{ site_slug }}"
+status = 302
+location = "{{ site_url }}*"
+{%- endif %}

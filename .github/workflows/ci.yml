@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: full
+            data: >-
+              --data site_name="Example Go Links"
+              --data site_url=https://go.example.com
+              --data deploy_host=example.dreamhost.com
+              --data deploy_user=ruben
+              --data php_binary=/usr/local/php83/bin/php
+            check: --expect-404-plugin --expect-target
+          - name: minimal
+            data: >-
+              --data site_name="Minimal Links"
+              --data site_url=https://s.example.org
+              --data include_example_plugins=false
+            check: ""
+    name: render (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.2
+
+      - name: PHP version
+        run: php -v || echo "php not available; php -l will be skipped"
+
+      - name: Render template
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          # absolute template path: copier records it in .copier-answers.yml for the update step
+          uvx copier copy --defaults --vcs-ref HEAD ${{ matrix.data }} "$GITHUB_WORKSPACE" "$RUNNER_TEMP/site"
+
+      - name: Check rendered site
+        run: python3 scripts/check_render.py "$RUNNER_TEMP/site" ${{ matrix.check }}
+
+      - name: copier update is a clean no-op
+        working-directory: ${{ runner.temp }}/site
+        run: |
+          git init -q -b main && git add -A && git commit -qm render
+          uvx copier update --defaults --vcs-ref HEAD
+          git status --porcelain
+          test -z "$(git status --porcelain)"

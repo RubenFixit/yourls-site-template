@@ -1,0 +1,70 @@
+# Template-owned (yourls-site-template). Deploys {{ site_name }} with yourls-manager.
+#
+# Triggers: pushing a tag v* (deploys "prod"), or manual dispatch with a target name.
+# Setup (repo Settings -> Environments -> "production"; add required reviewers if wanted):
+#   DEPLOY_SSH_KEY      private key (ed25519) whose public half is in ~/.ssh/authorized_keys on the host
+#   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan -p <port> <host>` (verify the fingerprint!)
+name: deploy
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target name from site.toml [deploy.targets.<name>]"
+        required: true
+        default: prod
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-{% raw %}${{ inputs.target || 'prod' }}{% endraw %}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+
+      - name: Install yourls-manager
+        run: uv sync --locked
+
+      - name: Configure SSH
+        env:
+{%- raw %}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+{%- endraw %}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::Secrets DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must be set on the 'production' environment"
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          printf 'Host *\n  IdentityFile ~/.ssh/id_ed25519\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy
+        env:
+          TARGET: {% raw %}${{ inputs.target || 'prod' }}{% endraw %}
+        run: uv run --locked ym deploy "$TARGET"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

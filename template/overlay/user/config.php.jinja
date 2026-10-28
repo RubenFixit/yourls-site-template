@@ -1,0 +1,75 @@
+<?php
+/**
+ * YOURLS config shim for {{ site_slug }} — template-owned (yourls-site-template).
+ *
+ * This file contains NO secrets. It loads the real, server-local YOURLS config,
+ * which lives outside the web root and never enters Git:
+ *
+ *   1. the file named by the YOURLS_CONFIG_FILE environment variable, if set and readable;
+ *   2. else <parent of web root>/yourls-config/{{ site_slug }}.php;
+ *   3. else HTTP 503 "server-local configuration missing" (CLI: message on stderr, exit 1).
+ *
+ * Start the server-local file from server/config.example.php in the site repo.
+ *
+ * Note: YOURLS requires this file at global scope, so the server config is required
+ * at top level here (no function wrapper) to keep $yourls_user_passwords etc. global.
+ */
+
+// Refuse direct web requests to this file.
+if (PHP_SAPI !== 'cli' && isset($_SERVER['SCRIPT_FILENAME'])
+    && realpath((string) $_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+    http_response_code(403);
+    exit;
+}
+
+$__ym_config = null;
+$__ym_candidates = [];
+$__ym_env = getenv('YOURLS_CONFIG_FILE');
+if (is_string($__ym_env) && $__ym_env !== '') {
+    $__ym_candidates[] = $__ym_env;
+}
+$__ym_candidates[] = dirname(__DIR__, 2) . '/yourls-config/{{ site_slug }}.php';
+foreach ($__ym_candidates as $__ym_candidate) {
+    if (is_file($__ym_candidate) && is_readable($__ym_candidate)) {
+        $__ym_config = $__ym_candidate;
+        break;
+    }
+}
+unset($__ym_env, $__ym_candidate);
+
+if ($__ym_config === null) {
+    // health.php sets this to report {"ok": false} as JSON instead of the plain 503 below.
+    if (defined('YM_CONFIG_OPTIONAL')) {
+        unset($__ym_config, $__ym_candidates);
+        return false;
+    }
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, "yourls-site: server-local configuration missing; looked for:\n");
+        foreach ($__ym_candidates as $__ym_candidate) {
+            fwrite(STDERR, "  - {$__ym_candidate}\n");
+        }
+        fwrite(STDERR, "Create it from server/config.example.php in the site repo.\n");
+        exit(1);
+    }
+    if (!headers_sent()) {
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('Retry-After: 300');
+    }
+    echo "503 Service Unavailable: server-local configuration missing.\n";
+    exit;
+}
+unset($__ym_candidates);
+
+require $__ym_config;
+unset($__ym_config);
+
+// YOURLS auto-hashes plaintext passwords by rewriting YOURLS_CONFIGFILE, which is
+// this shim, not the file that holds the passwords; that cannot work, so it is
+// disabled here. Store passwords pre-hashed (see server/config.example.php).
+if (!defined('YOURLS_NO_HASH_PASSWORD')) {
+    define('YOURLS_NO_HASH_PASSWORD', true);
+}
+
+return true;

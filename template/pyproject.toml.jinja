@@ -1,0 +1,17 @@
+# Template-owned (yourls-site-template). Local additions are kept by `copier update`'s merge.
+# To move to a newer yourls-manager: `uvx copier update --data manager_version=vX.Y.Z`
+# (or edit the tag below), then `uv lock` and commit.
+[project]
+name = "{{ site_slug }}"
+version = "0.0.0"
+description = "YOURLS site definition for {{ site_name | replace("\\", "\\\\") | replace('"', '\\"') }} ({{ site_url }})"
+requires-python = ">=3.11"
+dependencies = [
+    "yourls-manager",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+yourls-manager = { git = "https://github.com/RubenFixit/yourls-manager", tag = "{{ manager_version }}" }

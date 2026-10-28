@@ -1,0 +1,115 @@
+<?php
+/*
+ * Server-local YOURLS config for {{ site_name }} ({{ site_slug }}).
+ * Template-owned EXAMPLE: the real file holds secrets and lives ONLY on the server.
+ *
+ * Based on user/config-sample.php from YOURLS {{ yourls_version }}.
+ *
+ * Install:
+ *   1. Copy this file to the server, outside the web root, as
+ *        <parent of web root>/yourls-config/{{ site_slug }}.php
+{%- if deploy_host %}
+ *      e.g. scp server/config.example.php {{ deploy_user }}@{{ deploy_host }}:yourls-config/{{ site_slug }}.php
+{%- endif %}
+ *      (or set the YOURLS_CONFIG_FILE environment variable to its path).
+ *   2. chmod 600 it (PHP runs as your user on DreamHost-style shared hosting).
+ *   3. Replace every CHANGE-ME value below.
+ *
+ * The site's user/config.php is only a shim that loads this file; see
+ * overlay/user/config.php in the site repo.
+ *
+ * Save as plain text with nothing before the opening <?php tag.
+ */
+
+/*
+ ** MySQL settings - You can get this info from your web host
+ */
+
+/** MySQL database username */
+define( 'YOURLS_DB_USER', 'CHANGE-ME' );
+
+/** MySQL database password */
+define( 'YOURLS_DB_PASS', 'CHANGE-ME' );
+
+/** The name of the database for YOURLS
+ ** Use lower case letters [a-z], digits [0-9] and underscores [_] only */
+define( 'YOURLS_DB_NAME', 'CHANGE-ME' );
+
+/** MySQL hostname.
+ ** If using a non standard port, specify it like 'hostname:port', e.g. 'localhost:9999' or '127.0.0.1:666'
+ ** A socket can be given as 'localhost:/path/to/mysql.sock'.
+ ** DreamHost: the MySQL hostname you created in the panel, e.g. 'mysql.example.com' */
+define( 'YOURLS_DB_HOST', 'localhost' );
+
+/** MySQL tables prefix
+ ** YOURLS will create tables using this prefix (eg `yourls_url`, `yourls_options`, ...)
+ ** Use lower case letters [a-z], digits [0-9] and underscores [_] only */
+define( 'YOURLS_DB_PREFIX', 'yourls_' );
+
+/*
+ ** Site options
+ */
+
+/** YOURLS installation URL
+ ** All lowercase, no trailing slash at the end.
+ ** Must match [site].url in site.toml. */
+define( 'YOURLS_SITE', '{{ site_url }}' );
+
+/** YOURLS language
+ ** Change this setting to use a translation file for your language, instead of the default English.
+ ** That translation file (a .mo file) must be installed in the user/language directory.
+ ** See https://yourls.org/translations for more information */
+define( 'YOURLS_LANG', '' );
+
+/** Allow multiple short URLs for a same long URL
+ ** Set to true to have only one pair of shortURL/longURL (default YOURLS behavior)
+ ** Set to false to allow multiple short URLs pointing to the same long URL (bit.ly behavior) */
+define( 'YOURLS_UNIQUE_URLS', true );
+
+/** Private means the Admin area will be protected with login/pass as defined below.
+ ** Set to false for public usage (eg on a restricted intranet or for test setups)
+ ** Read https://yourls.org/privatepublic for more details if you're unsure */
+define( 'YOURLS_PRIVATE', true );
+
+/** A random secret hash used to encrypt cookies. Make it long and random, and unique per site.
+ ** Generate one with:
+ **   php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;' */
+define( 'YOURLS_COOKIEKEY', 'CHANGE-ME' );
+
+/** Username(s) and password(s) allowed to access the admin area.
+ **
+ ** Store passwords PRE-HASHED. YOURLS normally rewrites plaintext passwords into hashes
+ ** in its config file, but its config file is the shim (user/config.php), so the shim
+ ** disables that (YOURLS_NO_HASH_PASSWORD). Plaintext still works but stays plaintext.
+ **
+ ** Generate a hash entry on any machine with PHP (YOURLS stores '$' as '!'):
+ **   php -r 'echo "phpass:", str_replace("$", "!", password_hash($argv[1], PASSWORD_DEFAULT)), PHP_EOL;' 'the-password'
+ ** Read https://yourls.org/userpassword for more information */
+$yourls_user_passwords = [
+    'CHANGE-ME-username' => 'phpass:CHANGE-ME',
+    // 'username2' => 'phpass:...',
+];
+
+/** URL shortening method: either 36 or 62
+ ** 36: generates all lowercase keywords (ie: 13jkm)
+ ** 62: generates mixed case keywords (ie: 13jKm or 13JKm)
+ ** For more information, see https://yourls.org/urlconvert */
+define( 'YOURLS_URL_CONVERT', 36 );
+
+/** Debug mode to output some internal information
+ ** Default is false for live site. Enable when coding or before submitting a new issue */
+define( 'YOURLS_DEBUG', false );
+
+/**
+ * Reserved keywords (so that generated URLs won't match them)
+ * Define here negative, unwanted or potentially misleading keywords.
+ * (The upstream sample ships a short list of offensive words; add your own.)
+ */
+$yourls_reserved_URL = [
+    'admin',
+    'health',
+];
+
+/*
+ ** Personal settings would go after here.
+ */

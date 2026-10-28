@@ -1,0 +1,17 @@
+# Template-owned (yourls-site-template).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # uv.lock. yourls-manager is pinned by git tag in [tool.uv.sources]; bump that
+  # tag with `uvx copier update --data manager_version=vX.Y.Z` (or by hand + `uv lock`).
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,0 +1,93 @@
+<?php
+/*
+Plugin Name: Site Branding
+Plugin URI: https://github.com/RubenFixit/yourls-site-template
+Description: Site logo and stylesheet via YOURLS hooks. Assets live in this plugin's assets/ directory.
+Version: 1.0.0
+Author: yourls-site-template
+Author URI: https://github.com/RubenFixit/yourls-site-template
+*/
+
+/*
+ * Template-owned (yourls-site-template); customize the files in assets/ instead.
+ *
+ * - assets/brand.css is linked on every YOURLS page (action `html_head`).
+ * - If assets/logo.svg|png|webp|jpg exists, it replaces the stock YOURLS logo in the
+ *   admin header: output between actions `pre_html_logo` and `html_logo` is buffered
+ *   and the <img id="yourls-logo"> src/alt/title are rewritten.
+ * - If assets/favicon.ico|png|svg exists, a <link rel="icon"> is added.
+ */
+
+// No direct call
+if (!defined('YOURLS_ABSPATH')) {
+    die();
+}
+
+const SITE_BRANDING_NAME = '{{ site_name | replace("\\", "\\\\") | replace("'", "\\'") }}';
+
+/**
+ * Public URL of an asset (with mtime cache-buster), or null if the file does not exist.
+ */
+function site_branding_asset_url(string $file): ?string
+{
+    $path = __DIR__ . '/assets/' . $file;
+    if (!is_file($path)) {
+        return null;
+    }
+    return yourls_plugin_url(__DIR__) . '/assets/' . rawurlencode($file) . '?v=' . filemtime($path);
+}
+
+/** First existing asset among the candidates, as a URL. */
+function site_branding_first_asset(array $candidates): ?string
+{
+    foreach ($candidates as $file) {
+        $url = site_branding_asset_url($file);
+        if ($url !== null) {
+            return $url;
+        }
+    }
+    return null;
+}
+
+yourls_add_action('html_head', 'site_branding_html_head');
+function site_branding_html_head($context = null): void
+{
+    $css = site_branding_asset_url('brand.css');
+    if ($css !== null) {
+        echo '<link rel="stylesheet" href="' . yourls_esc_url($css) . '" type="text/css" media="all" />' . "\n";
+    }
+    $icon = site_branding_first_asset(['favicon.ico', 'favicon.png', 'favicon.svg']);
+    if ($icon !== null) {
+        echo '<link rel="icon" href="' . yourls_esc_url($icon) . '" />' . "\n";
+    }
+}
+
+yourls_add_action('pre_html_logo', 'site_branding_logo_start');
+function site_branding_logo_start(): void
+{
+    if (site_branding_first_asset(['logo.svg', 'logo.png', 'logo.webp', 'logo.jpg']) !== null) {
+        ob_start();
+        $GLOBALS['site_branding_buffering'] = true;
+    }
+}
+
+yourls_add_action('html_logo', 'site_branding_logo_end');
+function site_branding_logo_end(): void
+{
+    if (empty($GLOBALS['site_branding_buffering'])) {
+        return;
+    }
+    $GLOBALS['site_branding_buffering'] = false;
+    $html = (string) ob_get_clean();
+    $logo = site_branding_first_asset(['logo.svg', 'logo.png', 'logo.webp', 'logo.jpg']);
+    $name = yourls_esc_attr(SITE_BRANDING_NAME);
+
+    $html = preg_replace_callback(
+        '/<img\b[^>]*\bid=(["\'])yourls-logo\1[^>]*>/i',
+        static function (array $m) use ($logo, $name): string {
+            return '<img src="' . yourls_esc_url($logo) . '" id="yourls-logo" alt="' . $name . '" title="' . $name . '" />';
+        },
+        $html
+    ) ?? $html;
+    echo $html;
+}

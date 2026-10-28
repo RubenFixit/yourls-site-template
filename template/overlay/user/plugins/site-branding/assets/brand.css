@@ -1,0 +1,15 @@
+/*
+ * Site stylesheet — site-owned (`copier update` never overwrites this file).
+ * Linked on every YOURLS page by the site-branding plugin (html_head action).
+ */
+
+/* Keep a custom logo (assets/logo.*) at a sensible size in the admin header. */
+#yourls-logo {
+    max-height: 96px;
+    width: auto;
+}
+
+/* Example accent colour for links and the header. Adjust or delete.
+a, a:visited { color: #1f6feb; }
+header[role="banner"] h1 a { color: #1f6feb; }
+*/

@@ -1,0 +1,29 @@
+# Build output (`ym build`)
+/dist/
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Leftovers from an interrupted `ym core` / `ym sync` swap
+/.yourls.old-*
+/.yourls.new-*
+
+# Secrets and dumps never enter Git: the real config lives on the server only
+/server/*.php
+!/server/config.example.php
+.env
+*.sql
+*.sql.gz
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# NOTE: yourls/ (vendored core + plugins) and uv.lock ARE committed.

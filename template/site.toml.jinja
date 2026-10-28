@@ -1,0 +1,114 @@
+{%- if '/' in deploy_path.strip('/') -%}
+{%-   set parent = deploy_path.rsplit('/', 1)[0] ~ '/' -%}
+{%- elif deploy_path.startswith('/') -%}
+{%-   set parent = '/' -%}
+{%- else -%}
+{%-   set parent = '' -%}
+{%- endif -%}
+{%- set c = '' if deploy_host else '# ' -%}
+# site.toml — THE definition of this YOURLS site. Hand-edited; site-owned
+# (`copier update` never overwrites it). Consumed by yourls-manager (`ym`).
+#
+# Workflow: edit this file, then
+#   uv run ym sync          # vendor/remove plugins to match [[plugins]]
+#   uv run ym core --version X.Y.Z   # move core (also rewrites [core].version)
+#   uv run ym deploy prod
+# Unknown keys produce a warning; invalid values produce an error naming the key.
+
+[site]
+name = "{{ site_name | replace("\\", "\\\\") | replace('"', '\\"') }}"       # display name
+slug = "{{ site_slug }}"       # [a-z0-9-]+; names the server config file yourls-config/<slug>.php
+url  = "{{ site_url }}"        # public base URL, no trailing slash
+
+[core]
+repo    = "https://github.com/YOURLS/YOURLS.git"   # upstream git repo (default)
+version = "{{ yourls_version }}"                    # exact tag ("latest" is NOT allowed here; use `ym core --version latest`)
+# Glob patterns relative to the core repo root that are not vendored into yourls/.
+# LICENSE and readme.html are kept unless listed explicitly.
+exclude = [".github", ".git*", "tests", "*.md"]
+
+# ---------------------------------------------------------------------------
+# Plugins. One [[plugins]] table per plugin directory under user/plugins/.
+#   name   = directory name under user/plugins (required)
+#   repo   = git URL; omit for plugins shipped with core or provided by overlay/
+#   ref    = branch, tag, "HEAD", or a 40-char sha (default "HEAD"); `ym sync` locks the commit
+#   path   = subdirectory inside the repo that contains plugin.php (default ".")
+#   active = whether `ym deploy` activates it (default true); the active set on the
+#            server is made exactly equal to the active plugins listed here
+# Local patches to a vendored plugin go in overlay/user/plugins/<name>/ (overlay wins).
+# ---------------------------------------------------------------------------
+
+# Site logo + stylesheet via YOURLS hooks (lives in overlay/user/plugins/site-branding).
+[[plugins]]
+name   = "site-branding"
+active = true
+{% if include_example_plugins %}
+[[plugins]]
+name   = "timezones"
+repo   = "https://github.com/YOURLS/timezones"
+ref    = "HEAD"
+active = true
+
+[[plugins]]
+name   = "404-if-not-found"
+repo   = "https://github.com/YOURLS/404-if-not-found"
+ref    = "HEAD"
+active = true
+
+# More examples (uncomment to use):
+#
+# [[plugins]]
+# name   = "dont-log-bots"
+# repo   = "https://github.com/YOURLS/dont-log-bots"
+# ref    = "HEAD"
+# active = true
+#
+# [[plugins]]
+# name   = "keep-query-string"
+# repo   = "https://github.com/rinogo/yourls-keep-query-string"
+# ref    = "HEAD"
+# path   = "."
+# active = true
+#
+# [[plugins]]
+# name   = "hyphens-in-urls"      # ships with YOURLS core: no repo needed
+# active = true
+{% else %}
+# Example (uncomment to use):
+#
+# [[plugins]]
+# name   = "404-if-not-found"
+# repo   = "https://github.com/YOURLS/404-if-not-found"
+# ref    = "HEAD"
+# active = true
+#
+# [[plugins]]
+# name   = "hyphens-in-urls"      # ships with YOURLS core: no repo needed
+# active = true
+{% endif %}
+[build]
+out = "dist"                     # build output directory (gitignored)
+
+# ---------------------------------------------------------------------------
+# Deploy targets. `ym deploy <name>`; type "rsync" = rsync over SSH
+# (or to the local filesystem when host is omitted).
+# The server-local YOURLS config (secrets) must exist at config_file before the
+# first deploy; start from server/config.example.php.
+# ---------------------------------------------------------------------------
+{%- if not deploy_host %}
+# Not configured yet: uncomment and fill in. Do NOT leave `host` out unless you
+# really mean a local-filesystem target.
+#
+{%- endif %}
+{{ c }}[deploy.targets.prod]
+{{ c }}type        = "rsync"
+{{ c }}host        = "{{ deploy_host or 'example.dreamhost.com' }}"
+{{ c }}user        = "{{ deploy_user or 'username' }}"
+{{ c }}port        = {{ deploy_port }}
+{{ c }}path        = "{{ deploy_path }}"   # web root; relative = relative to remote $HOME
+{{ c }}php         = "{{ php_binary }}"   # PHP >= 8.1 CLI; DreamHost: /usr/local/php83/bin/php
+{{ c }}# config_file = "{{ parent }}yourls-config/{{ site_slug }}.php"    # default: <parent of path>/yourls-config/<slug>.php
+{{ c }}# backup_dir  = "{{ parent }}yourls-backups/{{ site_slug }}"       # default: <parent of path>/yourls-backups/<slug>
+{{ c }}protect     = [".well-known/"]      # remote paths rsync --delete must not touch
+{{ c }}backup_keep = 10                    # number of DB dumps retained
+{{ c }}# url         = "{{ site_url }}"    # default: [site].url; used by `ym verify`

@@ -1,0 +1,149 @@
+# Copier template: generates a YOURLS *site repo* managed by yourls-manager.
+# Spec: https://github.com/RubenFixit/yourls-manager/blob/main/docs/design.md (sections 1, 2, 7, 8)
+
+_min_copier_version: "9.0.0"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+
+# Site-owned files: rendered once on `copier copy`, never touched by `copier update`.
+# Everything else in template/ is template-owned and is 3-way merged on update.
+_skip_if_exists:
+  - site.toml
+  - tests/redirects.toml
+  - overlay/user/plugins/site-branding/assets/brand.css
+  - overlay/user/plugins/site-branding/assets/README.md
+
+# ---------------------------------------------------------------------------
+# Site identity
+# ---------------------------------------------------------------------------
+site_name:
+  type: str
+  help: Display name of the site (e.g. "Example Go Links")
+  validator: >-
+    {% if not site_name.strip() %}site_name must not be empty{% endif %}
+    {% if '\n' in site_name or '*/' in site_name %}site_name must be a single line without "*/"{% endif %}
+
+site_url:
+  type: str
+  help: >-
+    Public base URL: https, lowercase, domain root, no trailing slash
+    (e.g. https://go.example.com). YOURLS must be installed at the domain root.
+  placeholder: https://go.example.com
+  validator: >-
+    {% if not (site_url | regex_search('^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$')) %}site_url must look like https://go.example.com (https, lowercase, no path, no trailing slash){% endif %}
+
+site_slug:
+  type: str
+  help: >-
+    Machine name [a-z0-9-]+. Names the server-local config file
+    (yourls-config/<slug>.php) and the backup directory.
+  default: "{{ site_url.split('://')[-1].split(':')[0] | replace('.', '-') | lower }}"
+  validator: >-
+    {% if not (site_slug | regex_search('^[a-z0-9-]+$')) %}site_slug must match [a-z0-9-]+{% endif %}
+
+github_owner:
+  type: str
+  help: GitHub user/org that will own the site repo (used in docs and links)
+  default: RubenFixit
+  validator: >-
+    {% if not (github_owner | regex_search('^[A-Za-z0-9-]+$')) %}github_owner must be a GitHub user or org name{% endif %}
+
+# ---------------------------------------------------------------------------
+# Versions
+# ---------------------------------------------------------------------------
+yourls_version:
+  type: str
+  help: >-
+    YOURLS core tag to start from (written to site.toml [core].version).
+    "latest" is not allowed here; use `ym core --version latest` later.
+  default: "1.10.6"
+  validator: >-
+    {% if not (yourls_version | regex_search('^[0-9]+\.[0-9]+(\.[0-9]+)?$')) %}yourls_version must be a release tag like 1.10.6{% endif %}
+
+manager_version:
+  type: str
+  help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
+  default: v0.1.0
+  validator: >-
+    {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
+
+# ---------------------------------------------------------------------------
+# Deploy target "prod" (rsync over SSH)
+# ---------------------------------------------------------------------------
+deploy_host:
+  type: str
+  help: >-
+    SSH host for the prod target (e.g. pdx1-shared-a1-01.dreamhost.com).
+    Leave empty to configure later: the prod target is then written to
+    site.toml commented out.
+  default: ""
+  validator: >-
+    {% if deploy_host and not (deploy_host | regex_search('^[A-Za-z0-9.-]+$')) %}deploy_host must be a hostname{% endif %}
+
+deploy_user:
+  type: str
+  help: SSH user on the deploy host (the shell user that owns the web directory)
+  default: ""
+  when: "{{ deploy_host != '' }}"
+  validator: >-
+    {% if deploy_host and not (deploy_user | regex_search('^[A-Za-z0-9._-]+$')) %}deploy_user is required when deploy_host is set{% endif %}
+
+deploy_port:
+  type: int
+  help: SSH port
+  default: 22
+  when: "{{ deploy_host != '' }}"
+  validator: >-
+    {% if deploy_port < 1 or deploy_port > 65535 %}deploy_port must be 1-65535{% endif %}
+
+deploy_path:
+  type: str
+  help: >-
+    Web root on the server. Relative paths are relative to the remote $HOME
+    (DreamHost: the domain directory, e.g. go.example.com).
+  default: "{{ site_url.split('://')[-1].split(':')[0] }}"
+  validator: >-
+    {% if not deploy_path.strip() or deploy_path.endswith('/') %}deploy_path must be non-empty with no trailing slash{% endif %}
+
+php_binary:
+  type: str
+  help: >-
+    PHP CLI binary on the server (>= 8.1). On DreamHost use the versioned
+    binary, e.g. /usr/local/php83/bin/php, since plain `php` may be older.
+  default: php
+
+# ---------------------------------------------------------------------------
+# Content
+# ---------------------------------------------------------------------------
+include_example_plugins:
+  type: bool
+  help: >-
+    Add a few well-known plugins to site.toml (YOURLS/timezones and
+    YOURLS/404-if-not-found active; others as commented examples)?
+  default: true
+
+_message_after_copy: |
+  Site repo for {{ site_name }} created in {{ _copier_conf.dst_path }}.
+
+  Next steps:
+    cd {{ _copier_conf.dst_path }}
+    git init -b main
+    uv sync                                  # installs yourls-manager {{ manager_version }}, writes uv.lock
+    uv run ym core --version {{ yourls_version }}         # vendor YOURLS core into yourls/
+    uv run ym sync                           # vendor plugins listed in site.toml
+    uv run ym build                          # optional: inspect dist/
+
+  On the server (secrets never go into Git):
+    copy server/config.example.php to yourls-config/{{ site_slug }}.php in the
+    directory that contains the web root ({{ deploy_path }}){% if deploy_host %} on {{ deploy_user }}@{{ deploy_host }}{% endif %},
+    chmod 600 it, and fill in DB credentials, a fresh cookie key and admin users.
+  {%- if not deploy_host %}
+    Then uncomment and fill in [deploy.targets.prod] in site.toml.
+  {%- endif %}
+
+  Then:
+    uv run ym deploy prod --dry-run
+    git add -A && git commit -m "Initial site"
+
+  Template updates later: uvx copier update

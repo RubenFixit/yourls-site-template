@@ -1,0 +1,92 @@
+# {{ site_name }}
+
+YOURLS site for <{{ site_url }}>, managed with
+[yourls-manager](https://github.com/RubenFixit/yourls-manager) (`ym`) and generated from
+[yourls-site-template](https://github.com/RubenFixit/yourls-site-template).
+
+The complete site configuration lives in this repo. Secrets live only on the server.
+
+## Layout
+
+| Path | Owner | What |
+|---|---|---|
+| `site.toml` | you | The site definition: core version, plugins, deploy targets. |
+| `yourls.lock.json` | `ym` | Exact core/plugin commits and tree hashes. Commit it. |
+| `yourls/` | `ym` | Vendored YOURLS core + plugins. Never hand-edit; `ym status` shows drift. |
+| `overlay/` | template + you | Copied over `yourls/` at build time (config shim, `health.php`, `.htaccess`, branding plugin, local plugin patches). |
+| `server/config.example.php` | template | Starting point for the server-local config. |
+| `tests/redirects.toml` | you | Redirect expectations checked by `ym verify`. |
+| `.github/` | template | Deploy on tag, weekly update PRs, Dependabot. |
+
+Files marked *template* are updated by `uvx copier update` (local edits are merged, conflicts
+are marked). `site.toml`, `tests/redirects.toml` and the branding assets are never touched by updates.
+
+## Setup
+
+```sh
+uv sync                                   # installs the pinned yourls-manager
+uv run ym core --version {{ yourls_version }}
+uv run ym sync
+```
+
+Server-local config (once per server): copy `server/config.example.php` to
+`<parent of web root>/yourls-config/{{ site_slug }}.php` on the server, `chmod 600` it, and fill in
+DB credentials, a fresh cookie key and pre-hashed admin passwords (instructions inside). The
+shim at `overlay/user/config.php` loads it; `YOURLS_CONFIG_FILE` can point elsewhere.
+
+First deploy: `uv run ym deploy prod`, then open `{{ site_url }}/admin/install.php` once to
+create the tables. Later deploys run DB upgrades and plugin activation automatically.
+
+## Day-to-day
+
+```sh
+uv run ym status                     # versions, plugins, drift
+uv run ym check                      # what has upstream updates (exit 10 = updates)
+uv run ym deploy prod --dry-run      # build + show the rsync changes, change nothing
+uv run ym deploy prod                # build, back up DB, rsync, upgrade, plugins, verify
+uv run ym verify prod                # health check + tests/redirects.toml
+```
+
+### Add a plugin
+
+1. Add a `[[plugins]]` table to `site.toml` (`name`, `repo`, optional `ref`/`path`/`active`).
+2. `uv run ym sync` - vendors it into `yourls/user/plugins/<name>/` and locks the commit.
+3. Commit `site.toml`, `yourls.lock.json`, `yourls/`; deploy. Deploy activates exactly the
+   plugins marked `active = true`.
+
+Remove a plugin by deleting its table and running `uv run ym sync`. Patch a vendored plugin by
+putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at build time).
+
+### Update YOURLS core
+
+```sh
+uv run ym core --version latest      # or a specific tag; updates site.toml + lock
+git diff --stat yourls/              # review
+git commit -am "YOURLS X.Y.Z" && git tag vYYYY.MM.DD && git push --follow-tags
+```
+
+The `check-updates` workflow does this weekly and opens a pull request.
+
+### Deploy from GitHub
+
+Pushing a tag `v*` runs `.github/workflows/deploy.yml` (`ym deploy prod`) in the `production`
+environment. Manual runs can pick another target. Required environment secrets:
+`DEPLOY_SSH_KEY` (private key authorized on the host) and `DEPLOY_KNOWN_HOSTS`
+(`ssh-keyscan -p <port> <host>`, fingerprint verified).
+
+### Roll back
+
+v0.1 rollback is manual and Git-based:
+
+1. Check out the last good tag and deploy it: `git checkout v<previous> && uv run ym deploy prod --skip-backup`
+   (or run the deploy workflow on that tag).
+2. If a DB upgrade or bad data needs undoing, restore the dump taken before the bad deploy
+   from the backup dir on the server (default `<parent of web root>/yourls-backups/{{ site_slug }}/`):
+   `gunzip -c <dump>.sql.gz | mysql --defaults-extra-file=<file with credentials> <db>`.
+
+### Update the tooling
+
+- yourls-manager: `uvx copier update --data manager_version=vX.Y.Z` (bumps the pin in
+  `pyproject.toml`), then `uv lock`, review, commit.
+- Template files (workflows, shim, `.htaccess`, ...): `uvx copier update` and review the diff.
+  Answers are stored in `.copier-answers.yml`; don't edit it by hand.

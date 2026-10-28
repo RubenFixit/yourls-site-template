@@ -1,0 +1,78 @@
+# Template-owned (yourls-site-template). Weekly upstream check for {{ site_name }}.
+#
+# `ym check` exits 10 when YOURLS core or a plugin ref has a newer commit/tag.
+# Then core and plugins are re-vendored and a pull request is opened. Review the
+# diff of yourls/, merge, tag, and the deploy workflow ships it.
+#
+# Note: PRs opened with the default GITHUB_TOKEN do not trigger other workflows.
+# Repo Settings -> Actions -> General must allow "GitHub Actions to create and
+# approve pull requests".
+name: check-updates
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: check-updates
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+
+      - name: Install yourls-manager
+        run: uv sync --locked
+
+      - name: Check for updates
+        id: check
+        run: |
+          set +e
+          uv run --locked ym check > "$RUNNER_TEMP/check.txt" 2>&1
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/check.txt"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ] && [ "$code" -ne 10 ]; then
+            exit "$code"
+          fi
+
+      - name: Apply updates
+        if: steps.check.outputs.code == '10'
+        run: |
+          uv run --locked ym core --version latest
+          # core leaves yourls/ modified (uncommitted) in this throwaway checkout;
+          # --force lets sync proceed past the dirty-tree guard.
+          uv run --locked ym sync --update --force
+          {
+            echo "Automated update by the check-updates workflow."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/check.txt"
+            echo '```'
+            echo
+            echo "Review the yourls/ diff and yourls.lock.json, merge, then tag a release to deploy."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Open pull request
+        if: steps.check.outputs.code == '10'
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          branch: ym/upstream-updates
+          delete-branch: true
+          commit-message: "chore: update YOURLS core/plugins"
+          title: "chore: update YOURLS core/plugins"
+          body-path: {% raw %}${{ runner.temp }}{% endraw %}/pr-body.md
+          labels: dependencies
