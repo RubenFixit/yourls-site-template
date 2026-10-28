@@ -17,51 +17,68 @@ The complete site configuration lives in this repo. Secrets live only on the ser
 | `server/config.example.php` | template | Starting point for the server-local config. |
 | `tests/redirects.toml` | you | Redirect expectations checked by `ym verify`. |
 | `.github/` | template | Deploy on tag, weekly update PRs, Dependabot. |
+| `adopt-review/` | `ym adopt` | Only after adopting an existing install: report + files to merge by hand. Never deployed. |
 
-Files marked *template* are updated by `uvx copier update` (local edits are merged, conflicts
-are marked). `site.toml`, `tests/redirects.toml` and the branding assets are never touched by updates.
+Files marked *template* are updated by `ym template-update` (local edits are merged,
+conflicts are marked). `site.toml`, `tests/redirects.toml` and the branding assets are never
+touched by updates.
+
+Full documentation: the
+[yourls-manager README](https://github.com/RubenFixit/yourls-manager#readme).
+Commands below use the globally installed `ym`
+(`uv tool install git+https://github.com/RubenFixit/yourls-manager`). `uv run ym ...` runs the
+version pinned in `pyproject.toml` instead, which is what CI uses.
 
 ## Setup
 
+If this repo was created by `ym new` / `ym setup`, YOURLS core and plugins are already
+vendored. (After a raw `copier copy`, run `ym core` and `ym sync` first.)
+
 ```sh
-uv sync                                   # installs the pinned yourls-manager
-uv run ym core --version {{ yourls_version }}
-uv run ym sync
+ym server-config prod                # server-local config: DB, cookie key, admin user (0600, never in Git)
+ym deploy prod --dry-run             # build + show the rsync changes, change nothing
+ym deploy prod
 ```
 
-Server-local config (once per server): copy `server/config.example.php` to
-`<parent of web root>/yourls-config/{{ site_slug }}.php` on the server, `chmod 600` it, and fill in
-DB credentials, a fresh cookie key and pre-hashed admin passwords (instructions inside). The
-shim at `overlay/user/config.php` loads it; `YOURLS_CONFIG_FILE` can point elsewhere.
+The server-local config lives at `<parent of web root>/yourls-config/{{ site_slug }}.php`.
+The shim at `overlay/user/config.php` loads it, and `YOURLS_CONFIG_FILE` can point
+elsewhere. Passwords are read from `YM_DB_PASSWORD` / `YM_ADMIN_PASSWORD` or prompted for.
+To edit the file by hand, start from `server/config.example.php` (instructions inside).
 
-First deploy: `uv run ym deploy prod`, then open `{{ site_url }}/admin/install.php` once to
-create the tables. Later deploys run DB upgrades and plugin activation automatically.
+First deploy to an empty database: open `{{ site_url }}/admin/install.php` once to create the
+tables, then run `ym plugins prod`. Later deploys run DB upgrades and plugin activation
+automatically.
+
+Taking over a YOURLS install that already exists? Run `ym adopt --from-target prod`, review
+`adopt-review/REPORT.md`, then run `ym server-config prod --from-existing` and deploy (see
+the yourls-manager README).
 
 ## Day-to-day
 
 ```sh
-uv run ym status                     # versions, plugins, drift
-uv run ym check                      # what has upstream updates (exit 10 = updates)
-uv run ym deploy prod --dry-run      # build + show the rsync changes, change nothing
-uv run ym deploy prod                # build, back up DB, rsync, upgrade, plugins, verify
-uv run ym verify prod                # health check + tests/redirects.toml
+ym status                            # versions, plugins, drift
+ym check                             # what has upstream updates (exit 10 = updates)
+ym deploy prod --dry-run             # build + show the rsync changes, change nothing
+ym deploy prod                       # build, back up DB, rsync, upgrade, plugins, verify
+ym verify prod                       # health check + tests/redirects.toml
 ```
 
 ### Add a plugin
 
 1. Add a `[[plugins]]` table to `site.toml` (`name`, `repo`, optional `ref`/`path`/`active`).
-2. `uv run ym sync` - vendors it into `yourls/user/plugins/<name>/` and locks the commit.
+2. `ym sync` vendors it into `yourls/user/plugins/<name>/` and locks the commit.
 3. Commit `site.toml`, `yourls.lock.json`, `yourls/`; deploy. Deploy activates exactly the
    plugins marked `active = true`.
 
-Remove a plugin by deleting its table and running `uv run ym sync`. Patch a vendored plugin by
+Remove a plugin by deleting its table and running `ym sync`. Patch a vendored plugin by
 putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at build time).
 
-### Update YOURLS core
+### Update YOURLS core and plugins
 
 ```sh
-uv run ym core --version latest      # or a specific tag; updates site.toml + lock
-git diff --stat yourls/              # review
+ym core --version latest             # or a specific tag; updates site.toml + lock
+ym sync --update                     # plugins to their newest commits
+git diff --stat                      # review
 git commit -am "YOURLS X.Y.Z" && git tag vYYYY.MM.DD && git push --follow-tags
 ```
 
@@ -76,9 +93,9 @@ environment. Manual runs can pick another target. Required environment secrets:
 
 ### Roll back
 
-v0.1 rollback is manual and Git-based:
+Rollback is manual and Git-based:
 
-1. Check out the last good tag and deploy it: `git checkout v<previous> && uv run ym deploy prod --skip-backup`
+1. Check out the last good tag and deploy it: `git checkout v<previous> && ym deploy prod`
    (or run the deploy workflow on that tag).
 2. If a DB upgrade or bad data needs undoing, restore the dump taken before the bad deploy
    from the backup dir on the server (default `<parent of web root>/yourls-backups/{{ site_slug }}/`):
@@ -86,7 +103,9 @@ v0.1 rollback is manual and Git-based:
 
 ### Update the tooling
 
-- yourls-manager: `uvx copier update --data manager_version=vX.Y.Z` (bumps the pin in
-  `pyproject.toml`), then `uv lock`, review, commit.
-- Template files (workflows, shim, `.htaccess`, ...): `uvx copier update` and review the diff.
-  Answers are stored in `.copier-answers.yml`; don't edit it by hand.
+- Template files (workflows, shim, `.htaccess`, ...): `ym template-update` (needs a clean Git
+  tree), then review the diff and commit. Answers are stored in `.copier-answers.yml`. Don't
+  edit it by hand.
+- yourls-manager pin used by CI: `ym template-update --manager-version vX.Y.Z` (bumps
+  `pyproject.toml` and runs `uv lock`), then review and commit.
+- Your global `ym`: `uv tool upgrade yourls-manager`.

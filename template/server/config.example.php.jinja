@@ -5,7 +5,16 @@
  *
  * Based on user/config-sample.php from YOURLS {{ yourls_version }}.
  *
- * Install:
+ * Install (recommended): from the site repo run
+ *     ym server-config prod
+ *   It writes this file, filled in (DB settings, site URL, fresh cookie key, one admin user
+ *   hashed by the server's PHP), to the target's config_file with mode 0600. Passwords come
+ *   from YM_DB_PASSWORD / YM_ADMIN_PASSWORD or a prompt. When adopting an existing install,
+ *   `ym server-config prod --from-existing` copies its current config there instead.
+ *   ym fills values in by matching the define( 'NAME', ... ); lines and the
+ *   $yourls_user_passwords block below, so keep that format.
+ *
+ * Install by hand:
  *   1. Copy this file to the server, outside the web root, as
  *        <parent of web root>/yourls-config/{{ site_slug }}.php
 {%- if deploy_host %}

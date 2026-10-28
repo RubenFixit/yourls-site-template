@@ -64,7 +64,7 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.1.0
+  default: v0.2.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 
@@ -126,24 +126,15 @@ include_example_plugins:
 _message_after_copy: |
   Site repo for {{ site_name }} created in {{ _copier_conf.dst_path }}.
 
-  Next steps:
-    cd {{ _copier_conf.dst_path }}
-    git init -b main
-    uv sync                                  # installs yourls-manager {{ manager_version }}, writes uv.lock
-    uv run ym core --version {{ yourls_version }}         # vendor YOURLS core into yourls/
-    uv run ym sync                           # vendor plugins listed in site.toml
-    uv run ym build                          # optional: inspect dist/
-
-  On the server (secrets never go into Git):
-    copy server/config.example.php to yourls-config/{{ site_slug }}.php in the
-    directory that contains the web root ({{ deploy_path }}){% if deploy_host %} on {{ deploy_user }}@{{ deploy_host }}{% endif %},
-    chmod 600 it, and fill in DB credentials, a fresh cookie key and admin users.
+  Next steps (in {{ _copier_conf.dst_path }}):
   {%- if not deploy_host %}
-    Then uncomment and fill in [deploy.targets.prod] in site.toml.
+    (first: uncomment and fill in [deploy.targets.prod] in site.toml)
   {%- endif %}
+    ym server-config prod        # write the server-local config (secrets stay on the server)
+    ym deploy prod --dry-run     # build and show what a deploy would change
 
-  Then:
-    uv run ym deploy prod --dry-run
-    git add -A && git commit -m "Initial site"
+  If you ran copier directly (not via `ym new` / `ym setup`), first run `ym core` and
+  `ym sync` to vendor YOURLS and plugins, then `git init -b main` and commit.
+  Adopting an existing install? Run `ym adopt --from-target prod` before server-config.
 
-  Template updates later: uvx copier update
+  Full instructions: https://github.com/RubenFixit/yourls-manager#readme
