@@ -23,6 +23,14 @@ RewriteRule (^|/)\.(?!well-known(/|$)) - [F,L]
     </IfModule>
 </FilesMatch>
 
+# Site root -> admin. YOURLS ships no index page, and unknown keywords redirect to
+# YOURLS_SITE, so without this the root (and every bad keyword) would end in a 403.
+# Replace with your own overlay/index.php (public front page) if you prefer.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^$ admin/ [R=302,L]
+</IfModule>
+
 # BEGIN YOURLS
 <IfModule mod_rewrite.c>
 RewriteEngine On

@@ -25,7 +25,7 @@ repo    = "https://github.com/YOURLS/YOURLS.git"   # upstream git repo (default)
 version = "{{ yourls_version }}"                    # exact tag ("latest" is NOT allowed here; use `ym core --version latest`)
 # Glob patterns relative to the core repo root that are not vendored into yourls/.
 # LICENSE and readme.html are kept unless listed explicitly.
-exclude = [".github", ".git*", "tests", "*.md"]
+exclude = [".github", ".git*", "tests", "*.md", "phpunit.xml.dist"]
 
 # ---------------------------------------------------------------------------
 # Plugins. One [[plugins]] table per plugin directory under user/plugins/.
