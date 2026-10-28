@@ -5,7 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-28
+## [0.3.0] - 2026-10-28
+
+### Added
+- Release flow: prod gets `accept = "release"`; commented `staging` target (`accept = "any"`)
+  and `[release] push_markers` in site.toml. The deploy workflow deploys final release tags
+  to prod and `-rc.<n>` tags to staging (skipped without a staging target).
+
+### Changed
+- Site README documents `ym release` and the tag scheme `v<yourls>-<rev>[-rc.<n>]`, replacing
+  the `vYYYY.MM.DD` advice. New sites pin yourls-manager `v0.4.0`.
 
 ### Added
 - `deploy_type` question: `rsync` (default) or `sftp`, for hosts that only offer SFTP

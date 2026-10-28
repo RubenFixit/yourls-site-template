@@ -1,7 +1,11 @@
 # Template-owned (yourls-site-template). Deploys {{ site_name }} with yourls-manager.
 #
-# Triggers: pushing a tag v* (deploys "prod"), or manual dispatch with a target name.
-# Setup (repo Settings -> Environments -> "production"; add required reviewers if wanted):
+# Triggers: pushing a release tag (`ym release --push`): v<yourls>-<rev> deploys "prod",
+# v<yourls>-<rev>-rc.<n> deploys "staging" when site.toml defines it (skipped otherwise);
+# or manual dispatch with a target name. `ym deploy` enforces each target's `accept` policy
+# (prod: final release tags only), so a manual run can't bypass it.
+# Setup (repo Settings -> Environments -> "production" and "staging"; add required reviewers
+# to production if wanted), on each environment:
 #   DEPLOY_SSH_KEY      private key (ed25519) whose public half is in ~/.ssh/authorized_keys on the host
 #   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan -p <port> <host>` (verify the fingerprint!)
 name: deploy
@@ -21,18 +25,46 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-{% raw %}${{ inputs.target || 'prod' }}{% endraw %}
+  group: deploy-{% raw %}${{ github.ref_name }}-${{ inputs.target }}{% endraw %}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  resolve:
     runs-on: ubuntu-latest
-    environment: production
+    outputs:
+      target: ${{ '{{' }} steps.pick.outputs.target {{ '}}' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: pick
+        env:
+{%- raw %}
+          INPUT_TARGET: ${{ inputs.target }}
+          REF_NAME: ${{ github.ref_name }}
+{%- endraw %}
+        run: |
+          if [ -n "$INPUT_TARGET" ]; then target="$INPUT_TARGET"
+          elif [[ "$REF_NAME" == *-rc.* ]]; then target=staging
+          else target=prod
+          fi
+          if ! grep -Eq "^\[deploy\.targets\.${target}\]" site.toml; then
+            echo "::notice::no [deploy.targets.${target}] in site.toml; nothing to deploy"
+            target=""
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: resolve
+    if: needs.resolve.outputs.target != ''
+    runs-on: ubuntu-latest
+    environment: ${{ '{{' }} needs.resolve.outputs.target == 'prod' && 'production' || 'staging' {{ '}}' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0  # tags + remote branches: ym deploy checks the release tag at HEAD
 
       - uses: astral-sh/setup-uv@v10.3.2
         with:
@@ -49,7 +81,7 @@ jobs:
 {%- endraw %}
         run: |
           if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
-            echo "::error::Secrets DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must be set on the 'production' environment"
+            echo "::error::Secrets DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must be set on this deploy environment"
             exit 1
           fi
           install -m 700 -d ~/.ssh
@@ -62,7 +94,7 @@ jobs:
 
       - name: Deploy
         env:
-          TARGET: {% raw %}${{ inputs.target || 'prod' }}{% endraw %}
+          TARGET: {% raw %}${{ needs.resolve.outputs.target }}{% endraw %}
         run: uv run --locked ym deploy "$TARGET"
 
       - name: Remove SSH key

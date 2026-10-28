@@ -35,10 +35,10 @@ EXPECTED = [
     ".github/workflows/check-updates.yml",
     ".github/dependabot.yml",
 ]
-SITE_KEYS = {"site", "core", "plugins", "build", "deploy"}
+SITE_KEYS = {"site", "core", "plugins", "build", "deploy", "release"}
 TARGET_KEYS = {
     "type", "host", "user", "port", "path", "php", "config_file",
-    "backup_dir", "protect", "backup_keep", "url", "state_dir",
+    "backup_dir", "protect", "backup_keep", "url", "state_dir", "accept",
 }
 # Keys that only rsync targets use (ym warns about them on sftp targets).
 RSYNC_ONLY_KEYS = {"php", "backup_dir", "backup_keep"}

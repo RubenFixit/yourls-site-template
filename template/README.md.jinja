@@ -108,15 +108,38 @@ putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at 
 ym core --version latest             # or a specific tag; updates site.toml + lock
 ym sync --update                     # plugins to their newest commits
 git diff --stat                      # review
-git commit -am "YOURLS X.Y.Z" && git tag vYYYY.MM.DD && git push --follow-tags
+git commit -am "YOURLS X.Y.Z" && git push
+ym release --push                    # tag v<yourls>-<rev> and deploy it (see below)
 ```
 
 The `check-updates` workflow does this weekly and opens a pull request.
 
+### Releases
+
+Release tags are `v<YOURLS version>-<revision>`, e.g. `v1.10.6-1`, `v1.10.6-2`; the revision
+counts site changes and restarts at 1 when YOURLS is updated. Release candidates add
+`-rc.<n>` (`v1.10.6-3-rc.1`).
+
+```sh
+ym release --rc --push        # v1.10.6-3-rc.1 -> deploys to staging (if defined)
+ym release --rc --push        # after fixes: v1.10.6-3-rc.2
+ym release --promote --push   # v1.10.6-3 on the rc's commit -> deploys to prod
+ym release --push             # no staging? tag the next final release directly
+ym release --list             # releases and where each one is deployed
+```
+
+The tag message holds release notes built from `yourls.lock.json` (YOURLS and plugin changes)
+and the commit log. Each target's `accept` setting decides what it takes: prod has
+`accept = "release"` (only final release tags, clean tree; `--force` overrides and is
+recorded), other targets default to `"any"`. `ym deploy` refuses uncommitted changes
+everywhere unless you pass `--allow-dirty`, and after each deploy moves the local branch
+`deployed/<target>` to the deployed commit (`[release] push_markers = true` pushes it).
+
 ### Deploy from GitHub
 
-Pushing a tag `v*` runs `.github/workflows/deploy.yml` (`ym deploy prod`) in the `production`
-environment. Manual runs can pick another target. Required environment secrets:
+Pushing a release tag runs `.github/workflows/deploy.yml`: final tags deploy `prod` in the
+`production` environment, `-rc.<n>` tags deploy `staging` in the `staging` environment when
+site.toml defines that target. Manual runs can pick any target. Required environment secrets:
 `DEPLOY_SSH_KEY` (private key authorized on the host) and `DEPLOY_KNOWN_HOSTS`
 (`ssh-keyscan -p <port> <host>`, fingerprint verified).
 
@@ -124,7 +147,7 @@ environment. Manual runs can pick another target. Required environment secrets:
 
 Rollback is manual and Git-based:
 
-1. Check out the last good tag and deploy it: `git checkout v<previous> && ym deploy prod`
+1. Check out the last good release and deploy it: `git checkout v<previous> && ym deploy prod`
    (or run the deploy workflow on that tag).
 {%- if deploy_type == 'sftp' %}
 2. If a DB upgrade or bad data needs undoing, restore the database from your host's

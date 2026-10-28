@@ -120,6 +120,7 @@ out = "dist"                     # build output directory (gitignored)
 {{ c }}# state_dir   = "{{ parent }}.yourls-manager/{{ site_slug }}"      # default: <parent of path>/.yourls-manager/<slug> (manifest + release.json)
 {{ c }}protect     = [".well-known/"]      # remote paths ym never deletes
 {{ c }}# url         = "{{ site_url }}"    # default: [site].url; used for install/upgrade checks and `ym verify`
+{{ c }}accept      = "release"             # only final release tags (`ym release`); "any" allows any commit
 {%- else %}
 {{ c }}[deploy.targets.prod]
 {{ c }}type        = "rsync"
@@ -133,4 +134,13 @@ out = "dist"                     # build output directory (gitignored)
 {{ c }}protect     = [".well-known/"]      # remote paths rsync --delete must not touch
 {{ c }}backup_keep = 10                    # number of DB dumps retained
 {{ c }}# url         = "{{ site_url }}"    # default: [site].url; used by `ym verify`
+{{ c }}accept      = "release"             # only final release tags (`ym release`); "any" allows any commit
 {%- endif %}
+#
+# A staging target takes release candidates (`ym release --rc`) and any commit:
+# [deploy.targets.staging]
+# (same keys as prod, with its own path / host and url)
+# accept      = "any"
+
+# [release]
+# push_markers = true   # also push the deployed/<target> branch ym moves after each deploy
