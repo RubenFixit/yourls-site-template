@@ -36,7 +36,11 @@ vendored. (After a raw `copier copy`, run `ym core` and `ym sync` first.)
 
 ```sh
 ym server-config prod                # server-local config: DB, cookie key, admin user (0600, never in Git)
+{%- if deploy_type == 'sftp' %}
+ym deploy prod --dry-run             # build + show what would be uploaded/deleted, change nothing
+{%- else %}
 ym deploy prod --dry-run             # build + show the rsync changes, change nothing
+{%- endif %}
 ym deploy prod
 ```
 
@@ -45,9 +49,23 @@ The shim at `overlay/user/config.php` loads it, and `YOURLS_CONFIG_FILE` can poi
 elsewhere. Passwords are read from `YM_DB_PASSWORD` / `YM_ADMIN_PASSWORD` or prompted for.
 To edit the file by hand, start from `server/config.example.php` (instructions inside).
 
+{% if deploy_type == 'sftp' -%}
+The `prod` target deploys over **SFTP** (no shell needed). ym logs in with an SSH key
+(`ym ssh-setup prod`) or the password in `YM_PROD_PASSWORD` (asked on a terminal otherwise),
+and keeps a manifest of deployed files in `<parent of web root>/.yourls-manager/{{ site_slug }}/`:
+it only ever deletes files it deployed itself. There is no PHP on the server for ym, so:
+
+- ym does **not** back up the database. Use your host's backup tool before deploying.
+- First deploy to an empty database: open `{{ site_url }}/admin/install.php` once to
+  create the tables. After a core update, ym tells you when to open
+  `{{ site_url }}/admin/upgrade.php`.
+- Plugins: activate exactly the ones marked `active = true` in `site.toml` at
+  `{{ site_url }}/admin/plugins.php`. Every deploy prints the list.
+{%- else -%}
 First deploy to an empty database: open `{{ site_url }}/admin/install.php` once to create the
 tables, then run `ym plugins prod`. Later deploys run DB upgrades and plugin activation
 automatically.
+{%- endif %}
 
 Taking over a YOURLS install that already exists? Run `ym adopt --from-target prod`, review
 `adopt-review/REPORT.md`, then run `ym server-config prod --from-existing` and deploy (see
@@ -58,8 +76,14 @@ the yourls-manager README).
 ```sh
 ym status                            # versions, plugins, drift
 ym check                             # what has upstream updates (exit 10 = updates)
+{%- if deploy_type == 'sftp' %}
+ym deploy prod --dry-run             # build + show what would be uploaded/deleted, change nothing
+ym deploy prod                       # build, upload changes over SFTP, check install/upgrade, verify
+ym deploy prod --verify-remote       # also re-upload files someone changed on the server
+{%- else %}
 ym deploy prod --dry-run             # build + show the rsync changes, change nothing
 ym deploy prod                       # build, back up DB, rsync, upgrade, plugins, verify
+{%- endif %}
 ym verify prod                       # health check + tests/redirects.toml
 ```
 
@@ -67,8 +91,13 @@ ym verify prod                       # health check + tests/redirects.toml
 
 1. Add a `[[plugins]]` table to `site.toml` (`name`, `repo`, optional `ref`/`path`/`active`).
 2. `ym sync` vendors it into `yourls/user/plugins/<name>/` and locks the commit.
+{%- if deploy_type == 'sftp' %}
+3. Commit `site.toml`, `yourls.lock.json`, `yourls/`; deploy. Then activate it at
+   `{{ site_url }}/admin/plugins.php` (ym can't over SFTP; the deploy lists the plugins).
+{%- else %}
 3. Commit `site.toml`, `yourls.lock.json`, `yourls/`; deploy. Deploy activates exactly the
    plugins marked `active = true`.
+{%- endif %}
 
 Remove a plugin by deleting its table and running `ym sync`. Patch a vendored plugin by
 putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at build time).
@@ -97,9 +126,14 @@ Rollback is manual and Git-based:
 
 1. Check out the last good tag and deploy it: `git checkout v<previous> && ym deploy prod`
    (or run the deploy workflow on that tag).
+{%- if deploy_type == 'sftp' %}
+2. If a DB upgrade or bad data needs undoing, restore the database from your host's
+   backups (SFTP deploys don't dump the database).
+{%- else %}
 2. If a DB upgrade or bad data needs undoing, restore the dump taken before the bad deploy
    from the backup dir on the server (default `<parent of web root>/yourls-backups/{{ site_slug }}/`):
    `gunzip -c <dump>.sql.gz | mysql --defaults-extra-file=<file with credentials> <db>`.
+{%- endif %}
 
 ### Update the tooling
 

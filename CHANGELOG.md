@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
+### Added
+- `deploy_type` question: `rsync` (default) or `sftp`, for hosts that only offer SFTP
+  (needs yourls-manager v0.3.0). An sftp site gets a `type = "sftp"` prod target in
+  `site.toml` (with `state_dir` documented instead of `php` / `backup_dir` / `backup_keep`)
+  and a README that explains the browser steps (install/upgrade page, plugin activation)
+  and that SFTP deploys don't back up the database.
+- `scripts/check_render.py --expect-type rsync|sftp`; it also checks that a commented-out
+  prod target is valid TOML of that type. CI renders two sftp variants.
+
+### Changed
+- `php_binary` is only asked for rsync targets.
+- New sites pin yourls-manager `v0.3.0` by default.
+- `site.toml` comments describe both target types and point to `ym server-config prod`.
+
 ## [0.1.1] - 2026-10-28
 
 ### Fixed

@@ -64,17 +64,29 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.2.0
+  default: v0.3.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 
 # ---------------------------------------------------------------------------
-# Deploy target "prod" (rsync over SSH)
+# Deploy target "prod"
 # ---------------------------------------------------------------------------
+deploy_type:
+  type: str
+  help: >-
+    How ym deploys to the server. rsync: rsync + PHP CLI over SSH (needs shell
+    access; backs up the DB, runs DB upgrades and plugin activation). sftp: SFTP
+    only, for hosts without shell access (no DB backup; you open the install /
+    upgrade page and activate plugins in the browser, ym tells you when).
+  choices:
+    - rsync
+    - sftp
+  default: rsync
+
 deploy_host:
   type: str
   help: >-
-    SSH host for the prod target (e.g. pdx1-shared-a1-01.dreamhost.com).
+    SSH/SFTP host for the prod target (e.g. pdx1-shared-a1-01.dreamhost.com).
     Leave empty to configure later: the prod target is then written to
     site.toml commented out.
   default: ""
@@ -83,7 +95,7 @@ deploy_host:
 
 deploy_user:
   type: str
-  help: SSH user on the deploy host (the shell user that owns the web directory)
+  help: SSH/SFTP user on the deploy host (the user that owns the web directory)
   # No default on purpose: Copier validates defaults, and an empty default would fail
   # the validator below as soon as deploy_host is set (crashing the prompt).
   when: "{{ deploy_host != '' }}"
@@ -92,7 +104,7 @@ deploy_user:
 
 deploy_port:
   type: int
-  help: SSH port
+  help: SSH/SFTP port
   default: 22
   when: "{{ deploy_host != '' }}"
   validator: >-
@@ -102,7 +114,8 @@ deploy_path:
   type: str
   help: >-
     Web root on the server. Relative paths are relative to the remote $HOME
-    (DreamHost: the domain directory, e.g. go.example.com).
+    (sftp: the SFTP login directory). DreamHost: the domain directory, e.g.
+    go.example.com.
   default: "{{ site_url.split('://')[-1].split(':')[0] }}"
   validator: >-
     {% if not deploy_path.strip() or deploy_path.endswith('/') %}deploy_path must be non-empty with no trailing slash{% endif %}
@@ -113,6 +126,8 @@ php_binary:
     PHP CLI binary on the server (>= 8.1). On DreamHost use the versioned
     binary, e.g. /usr/local/php83/bin/php, since plain `php` may be older.
   default: php
+  # rsync targets only: sftp targets never run PHP on the server.
+  when: "{{ deploy_type == 'rsync' }}"
 
 # ---------------------------------------------------------------------------
 # Content

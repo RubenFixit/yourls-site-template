@@ -90,16 +90,37 @@ active = true
 out = "dist"                     # build output directory (gitignored)
 
 # ---------------------------------------------------------------------------
-# Deploy targets. `ym deploy <name>`; type "rsync" = rsync over SSH
-# (or to the local filesystem when host is omitted).
+# Deploy targets. `ym deploy <name>`.
+#   type "rsync": rsync + PHP CLI over SSH (or the local filesystem when host is
+#                 omitted). Backs up the DB, runs DB upgrades and plugin activation.
+#   type "sftp":  SFTP only, for hosts without shell access. ym tracks what it
+#                 deployed in <state_dir>/manifest.json and only deletes files it
+#                 deployed itself. No DB backup (use your host's backup tool); YOURLS
+#                 install/upgrade and plugin activation happen in the browser (ym
+#                 prints the links). Login: SSH key (`ym ssh-setup prod`) or the
+#                 password in $YM_PROD_PASSWORD (else asked on a terminal).
 # The server-local YOURLS config (secrets) must exist at config_file before the
-# first deploy; start from server/config.example.php.
+# first deploy: `ym server-config prod`.
 # ---------------------------------------------------------------------------
 {%- if not deploy_host %}
-# Not configured yet: uncomment and fill in. Do NOT leave `host` out unless you
+# Not configured yet: uncomment and fill in.
+{%-   if deploy_type == 'rsync' %} Do NOT leave `host` out unless you
 # really mean a local-filesystem target.
+{%-   endif %}
 #
 {%- endif %}
+{%- if deploy_type == 'sftp' %}
+{{ c }}[deploy.targets.prod]
+{{ c }}type        = "sftp"
+{{ c }}host        = "{{ deploy_host or 'ssh.example.com' }}"
+{{ c }}user        = "{{ deploy_user or 'username' }}"
+{{ c }}port        = {{ deploy_port }}
+{{ c }}path        = "{{ deploy_path }}"   # web root; relative = relative to the SFTP login dir
+{{ c }}# config_file = "{{ parent }}yourls-config/{{ site_slug }}.php"    # default: <parent of path>/yourls-config/<slug>.php
+{{ c }}# state_dir   = "{{ parent }}.yourls-manager/{{ site_slug }}"      # default: <parent of path>/.yourls-manager/<slug> (manifest + release.json)
+{{ c }}protect     = [".well-known/"]      # remote paths ym never deletes
+{{ c }}# url         = "{{ site_url }}"    # default: [site].url; used for install/upgrade checks and `ym verify`
+{%- else %}
 {{ c }}[deploy.targets.prod]
 {{ c }}type        = "rsync"
 {{ c }}host        = "{{ deploy_host or 'example.dreamhost.com' }}"
@@ -112,3 +133,4 @@ out = "dist"                     # build output directory (gitignored)
 {{ c }}protect     = [".well-known/"]      # remote paths rsync --delete must not touch
 {{ c }}backup_keep = 10                    # number of DB dumps retained
 {{ c }}# url         = "{{ site_url }}"    # default: [site].url; used by `ym verify`
+{%- endif %}

@@ -31,6 +31,21 @@ jobs:
               --data site_url=https://s.example.org
               --data include_example_plugins=false
             check: ""
+          - name: sftp
+            data: >-
+              --data site_name="SFTP Links"
+              --data site_url=https://go.example.net
+              --data deploy_type=sftp
+              --data deploy_host=ssh.example.net
+              --data deploy_user=ruben
+            check: --expect-404-plugin --expect-target --expect-type sftp
+          - name: sftp-minimal
+            data: >-
+              --data site_name="SFTP Minimal"
+              --data site_url=https://s.example.net
+              --data deploy_type=sftp
+              --data include_example_plugins=false
+            check: --expect-type sftp
     name: render (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v7
