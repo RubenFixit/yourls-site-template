@@ -63,7 +63,7 @@ it only ever deletes files it deployed itself. There is no PHP on the server for
   `{{ site_url }}/admin/plugins.php`. Every deploy prints the list.
 {%- else -%}
 First deploy to an empty database: open `{{ site_url }}/admin/install.php` once to create the
-tables, then run `ym plugins prod`. Later deploys run DB upgrades and plugin activation
+tables, then run `ym plugin apply prod`. Later deploys run DB upgrades and plugin activation
 automatically.
 {%- endif %}
 
@@ -74,6 +74,7 @@ the yourls-manager README).
 ## Day-to-day
 
 ```sh
+ym doctor                            # read-only health check: tools, repo, every target
 ym status                            # versions, plugins, drift
 ym check                             # what has upstream updates (exit 10 = updates)
 {%- if deploy_type == 'sftp' %}
@@ -87,10 +88,22 @@ ym deploy prod                       # build, back up DB, rsync, upgrade, plugin
 ym verify prod                       # health check + tests/redirects.toml
 ```
 
-### Add a plugin
+### Plugins
 
-1. Add a `[[plugins]]` table to `site.toml` (`name`, `repo`, optional `ref`/`path`/`active`).
-2. `ym sync` vendors it into `yourls/user/plugins/<name>/` and locks the commit.
+```sh
+ym plugin search redirect            # search the awesome-yourls catalog
+ym plugin add "404 If Not Found"     # by catalog name, or a git / GitHub project URL
+ym plugin list --check               # version, source, locked commit, upstream updates
+ym plugin disable NAME               # or enable; sets `active` in site.toml
+ym plugin remove NAME                # drops its [[plugins]] table and vendored copy
+```
+
+To add one:
+
+1. `ym plugin add NAME|URL` appends a `[[plugins]]` table to `site.toml` and vendors the
+   plugin into `yourls/user/plugins/<name>/`, locking the commit. (By hand: add the table
+   with `name`, `repo`, optional `ref`/`path`/`active`, then `ym sync`.)
+2. Review what it shows (plugin header, requirements).
 {%- if deploy_type == 'sftp' %}
 3. Commit `site.toml`, `yourls.lock.json`, `yourls/`; deploy. Then activate it at
    `{{ site_url }}/admin/plugins.php` (ym can't over SFTP; the deploy lists the plugins).
@@ -99,16 +112,21 @@ ym verify prod                       # health check + tests/redirects.toml
    plugins marked `active = true`.
 {%- endif %}
 
-Remove a plugin by deleting its table and running `ym sync`. Patch a vendored plugin by
-putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at build time).
+{% if deploy_type == 'sftp' -%}
+Before removing a plugin, deactivate it at `{{ site_url }}/admin/plugins.php`; the next
+deploy deletes its files. Its data (options, tables) stays in the database.
+{%- else -%}
+The next deploy deactivates a removed plugin and deletes its files; its data (options,
+tables) stays in the database.
+{%- endif %}
+Patch a vendored plugin by putting the changed files under `overlay/user/plugins/<name>/` (overlay wins at build time).
 
 ### Update YOURLS core and plugins
 
 ```sh
-ym core --version latest             # or a specific tag; updates site.toml + lock
-ym sync --update                     # plugins to their newest commits
-git diff --stat                      # review
-git commit -am "YOURLS X.Y.Z" && git push
+ym update --commit                   # core to the latest release, plugins to newest commits,
+                                     # build, and commit with a summary of the changes
+git push
 ym release --push                    # tag v<yourls>-<rev> and deploy it (see below)
 ```
 

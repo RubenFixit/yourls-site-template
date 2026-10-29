@@ -64,7 +64,7 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.4.0
+  default: v0.5.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 

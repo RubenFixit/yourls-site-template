@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-28
+
+### Changed
+- New sites pin yourls-manager `v0.5.0`.
+- Site README: a Plugins section with `ym plugin search/add/list/enable/disable/remove`
+  (adding by hand still documented), what removing a plugin does on deploy (sftp:
+  deactivate it in the admin first), `ym doctor` in the day-to-day commands, `ym update
+  --commit` for routine updates, and `ym plugin apply prod` instead of `ym plugins prod`.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added
