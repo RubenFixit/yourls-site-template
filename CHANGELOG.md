@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
 ### Changed
 - New sites pin yourls-manager `v0.7.0` and use its command names everywhere (README,
   site.toml comments, config example, copier messages): `ym target login` / `ym target
