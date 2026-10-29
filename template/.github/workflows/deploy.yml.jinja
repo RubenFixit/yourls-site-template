@@ -1,11 +1,13 @@
 # Template-owned (yourls-site-template). Deploys {{ site_name }} with yourls-manager.
 #
 # Triggers: pushing a release tag (`ym release --push`): v<yourls>-<rev> deploys "prod",
-# v<yourls>-<rev>-rc.<n> deploys "staging" when site.toml defines it (skipped otherwise);
-# or manual dispatch with a target name. `ym deploy` enforces each target's `accept` policy
-# (prod: final release tags only), so a manual run can't bypass it.
-# Setup (repo Settings -> Environments -> "production" and "staging"; add required reviewers
-# to production if wanted), on each environment:
+# v<yourls>-<rev>-rc.<n> deploys "staging"; or manual dispatch with a target name. Only
+# targets with `ci = true` in site.toml are deployed (others are skipped with a notice), so a
+# site deployed by hand never gets failed runs. `ym deploy` enforces each target's `accept`
+# policy (prod: final release tags only), so a manual run can't bypass it.
+# Setup: `ym ci setup <target>` does all of this (and sets ci = true). By hand: repo
+# Settings -> Environments -> "production" and "staging" (add required reviewers to
+# production if wanted), on each environment:
 #   DEPLOY_SSH_KEY      private key (ed25519) whose public half is in ~/.ssh/authorized_keys on the host
 #   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan -p <port> <host>` (verify the fingerprint!)
 name: deploy
@@ -48,8 +50,20 @@ jobs:
           elif [[ "$REF_NAME" == *-rc.* ]]; then target=staging
           else target=prod
           fi
-          if ! grep -Eq "^\[deploy\.targets\.${target}\]" site.toml; then
+          # ci = true on [deploy.targets.<target>] opts the target in
+          state=$(python3 - "$target" <<'PY'
+          import sys, tomllib
+          with open("site.toml", "rb") as fh:
+              targets = tomllib.load(fh).get("deploy", {}).get("targets", {})
+          t = targets.get(sys.argv[1])
+          print("missing" if t is None else "ci" if t.get("ci") is True else "manual")
+          PY
+          )
+          if [ "$state" = missing ]; then
             echo "::notice::no [deploy.targets.${target}] in site.toml; nothing to deploy"
+            target=""
+          elif [ "$state" != ci ]; then
+            echo "::notice::target ${target} is deployed by hand (no ci = true in site.toml); run \`ym ci setup ${target}\` to deploy it from here"
             target=""
           fi
           echo "target=$target" >> "$GITHUB_OUTPUT"

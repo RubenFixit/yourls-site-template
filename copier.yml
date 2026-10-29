@@ -64,7 +64,7 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.5.0
+  default: v0.6.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 
@@ -139,6 +139,15 @@ include_example_plugins:
     YOURLS/404-if-not-found active; others as commented examples)?
   default: true
 
+ci_deploy:
+  type: bool
+  help: >-
+    Deploy prod from GitHub Actions (release tags trigger .github/workflows/deploy.yml)?
+    Writes `ci = true` on the prod target; after pushing the repo to GitHub, run
+    `ym ci setup prod` to store the deploy key and host keys. No: deploy from your
+    machine with `ym deploy prod` (enable CI later with `ym ci setup prod`).
+  default: false
+
 _message_after_copy: |
   Site repo for {{ site_name }} created in {{ _copier_conf.dst_path }}.
 
@@ -148,6 +157,10 @@ _message_after_copy: |
   {%- endif %}
     ym server-config prod        # write the server-local config (secrets stay on the server)
     ym deploy prod --dry-run     # build and show what a deploy would change
+    ym repo create               # optional: keep the site on GitHub (private)
+  {%- if ci_deploy %}
+    ym ci setup prod             # GitHub Actions deploys: deploy key + host keys
+  {%- endif %}
 
   If you ran copier directly (not via `ym new` / `ym setup`), first run `ym core` and
   `ym sync` to vendor YOURLS and plugins, then `git init -b main` and commit.

@@ -153,13 +153,28 @@ recorded), other targets default to `"any"`. `ym deploy` refuses uncommitted cha
 everywhere unless you pass `--allow-dirty`, and after each deploy moves the local branch
 `deployed/<target>` to the deployed commit (`[release] push_markers = true` pushes it).
 
-### Deploy from GitHub
+### GitHub (optional)
 
-Pushing a release tag runs `.github/workflows/deploy.yml`: final tags deploy `prod` in the
-`production` environment, `-rc.<n>` tags deploy `staging` in the `staging` environment when
-site.toml defines that target. Manual runs can pick any target. Required environment secrets:
-`DEPLOY_SSH_KEY` (private key authorized on the host) and `DEPLOY_KNOWN_HOSTS`
-(`ssh-keyscan -p <port> <host>`, fingerprint verified).
+Deploys run from your machine; a Git remote is optional. To keep the site on GitHub (needs
+the [GitHub CLI](https://cli.github.com)):
+
+```sh
+ym repo create                       # private repo as origin, pushes the current branch
+```
+
+To deploy from GitHub Actions instead of your machine:
+
+```sh
+ym ci setup prod                     # environment, deploy key, host keys; sets ci = true
+git commit -m "Deploy from GitHub Actions" site.toml && git push
+ym ci status                         # check the environments and secrets
+```
+
+Then pushing a release tag runs `.github/workflows/deploy.yml`: final tags deploy `prod` in
+the `production` environment, `-rc.<n>` tags deploy `staging` in the `staging` environment.
+Manual runs can pick any target. Only targets with `ci = true` in site.toml are deployed;
+the others are skipped with a notice. The environments hold the secrets `DEPLOY_SSH_KEY`
+(private key authorized on the host) and `DEPLOY_KNOWN_HOSTS` (the host's keys).
 
 ### Roll back
 

@@ -24,7 +24,8 @@ jobs:
               --data deploy_host=example.dreamhost.com
               --data deploy_user=ruben
               --data php_binary=/usr/local/php83/bin/php
-            check: --expect-404-plugin --expect-target
+              --data ci_deploy=true
+            check: --expect-404-plugin --expect-target --expect-ci
           - name: minimal
             data: >-
               --data site_name="Minimal Links"

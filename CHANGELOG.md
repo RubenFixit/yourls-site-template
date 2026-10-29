@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+### Added
+- `ci_deploy` question (default no): writes `ci = true` on the prod target. The deploy
+  workflow only deploys targets with `ci = true`; others are skipped with a notice, so sites
+  deployed by hand get no failed runs on release tags.
+- Site README "GitHub (optional)": `ym repo create`, and `ym ci setup` / `ym ci status` for
+  GitHub Actions deploys.
+
+### Changed
+- New sites pin yourls-manager `v0.6.0` (needed for `ci`, `ym repo create`, `ym ci`).
+
 ## [0.4.0] - 2026-10-28
 
 ### Changed

@@ -1,7 +1,7 @@
 """Sanity-check a site rendered from this template.
 
 Usage: python scripts/check_render.py <rendered-site-dir> [--expect-404-plugin]
-       [--expect-target] [--expect-type rsync|sftp]
+       [--expect-target] [--expect-type rsync|sftp] [--expect-ci]
 
 Stdlib only. Checks expected files, TOML parsing and site.toml shape, leftover Jinja
 markers (outside GitHub Actions ${{ }} expressions), and `php -l` when php is available.
@@ -38,7 +38,7 @@ EXPECTED = [
 SITE_KEYS = {"site", "core", "plugins", "build", "deploy", "release"}
 TARGET_KEYS = {
     "type", "host", "user", "port", "path", "php", "config_file",
-    "backup_dir", "protect", "backup_keep", "url", "state_dir", "accept",
+    "backup_dir", "protect", "backup_keep", "url", "state_dir", "accept", "ci",
 }
 # Keys that only rsync targets use (ym warns about them on sftp targets).
 RSYNC_ONLY_KEYS = {"php", "backup_dir", "backup_keep"}
@@ -50,6 +50,7 @@ def main() -> int:
     ap.add_argument("--expect-404-plugin", action="store_true")
     ap.add_argument("--expect-target", action="store_true")
     ap.add_argument("--expect-type", choices=["rsync", "sftp"], default="rsync")
+    ap.add_argument("--expect-ci", action="store_true", help="prod must have ci = true")
     args = ap.parse_args()
     root: Path = args.site
     errors: list[str] = []
@@ -95,6 +96,8 @@ def main() -> int:
             else:
                 if set(prod) - TARGET_KEYS:
                     errors.append(f"site.toml: unknown target keys {sorted(set(prod) - TARGET_KEYS)}")
+                if prod.get("ci", False) is not args.expect_ci:
+                    errors.append(f"site.toml: prod ci = {prod.get('ci', False)}, expected {args.expect_ci}")
                 if prod.get("type") != args.expect_type or not prod.get("host"):
                     errors.append(f"site.toml: prod target must be {args.expect_type} with a host")
                 if args.expect_type == "sftp" and set(prod) & RSYNC_ONLY_KEYS:
