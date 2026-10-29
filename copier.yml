@@ -1,5 +1,4 @@
 # Copier template: generates a YOURLS *site repo* managed by yourls-manager.
-# Spec: https://github.com/RubenFixit/yourls-manager/blob/main/docs/design.md (sections 1, 2, 7, 8)
 
 _min_copier_version: "9.0.0"
 _subdirectory: template
