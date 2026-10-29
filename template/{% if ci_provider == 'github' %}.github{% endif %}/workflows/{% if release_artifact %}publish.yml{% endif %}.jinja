@@ -1,0 +1,53 @@
+# Template-owned (yourls-site-template). Publishes the release artifacts of {{ site_name }}.
+#
+# Every release tag (`ym release --push`): `ym artifact build` builds the tag's web root into
+# reproducible archives with a .sha256 per archive and a .json with the release metadata
+# (site.toml [artifact]), and `gh release create` attaches them to a GitHub release with the
+# tag's release notes. -rc.<n> tags become pre-releases. Rebuilding a tag gives the same
+# bytes, so a download can be checked against the repo. Independent of deploy.yml.
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-{% raw %}${{ github.ref_name }}{% endraw %}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # all tags (annotated): ym checks the release tag, gh reads its notes
+
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          enable-cache: true
+
+      - name: Install yourls-manager
+        run: uv sync --locked
+
+      - name: Build artifacts
+        env:
+          TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: uv run --locked ym artifact build --ref "$TAG" --out "$RUNNER_TEMP/artifacts"
+
+      - name: Create the release
+        env:
+{%- raw %}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+{%- endraw %}
+        run: |
+          flags=()
+          if [[ "$TAG" == *-rc.* ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "$RUNNER_TEMP"/artifacts/* \
+            --verify-tag --title "$TAG" --notes-from-tag "${flags[@]}"

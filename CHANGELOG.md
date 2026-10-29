@@ -4,6 +4,17 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+### Added
+- `ci_provider` question: `github` (default; the existing workflows), `gitlab` (a `.gitlab-ci.yml` with the same jobs: deploy on release tags for `ci = true` targets with File-type variables per environment, scheduled `check-updates` opening a merge request with a project access token, and the publish job) or `none` (no CI files). The CI files have conditional names, so only the chosen provider's files are rendered and `ym template update --data ci_provider=...` swaps them.
+- `release_artifact` question (default no): writes `[artifact] enabled = true` to `site.toml` (commented out otherwise) and adds a publish job that runs `ym artifact build` on every release tag: a GitHub release (`publish.yml`, rc tags as pre-releases) or GitLab's Generic Package Registry plus a release. The site README gets "Release artifacts" and "Consuming the artifact".
+- Site README: a "GitLab CI" setup section for GitLab sites and a "CI" note for sites without CI.
+- `.gitignore`: `/dist-artifacts/`.
+
+### Changed
+- New sites pin yourls-manager `v0.8.0` (needed for `ym artifact build` and `ym template update --data`).
+- `github_owner` is replaced by `repo_url` (optional; used in the README and the artifact download URLs).
+- `ci_deploy` is asked only when there is a CI provider; the post-copy message names the provider's setup steps.
+
 ## [0.6.0] - 2026-10-29
 
 ### Changed

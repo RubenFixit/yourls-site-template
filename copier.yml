@@ -42,12 +42,15 @@ site_slug:
   validator: >-
     {% if not (site_slug | regex_search('^[a-z0-9-]+$')) %}site_slug must match [a-z0-9-]+{% endif %}
 
-github_owner:
+repo_url:
   type: str
-  help: GitHub user/org that will own the site repo (used in docs and links)
-  default: RubenFixit
+  help: >-
+    Web address of the site repo, e.g. https://github.com/you/go-links or
+    https://gitlab.example.com/team/go-links (used in the README and its links only).
+    Leave empty if it has none yet.
+  default: ""
   validator: >-
-    {% if not (github_owner | regex_search('^[A-Za-z0-9-]+$')) %}github_owner must be a GitHub user or org name{% endif %}
+    {% if repo_url and not (repo_url | regex_search('^https?://[^/\\s]+/[^\\s]+[^/\\s]$')) %}repo_url must be a web URL like https://github.com/you/go-links (no trailing slash){% endif %}
 
 # ---------------------------------------------------------------------------
 # Versions
@@ -64,7 +67,7 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.7.0
+  default: v0.8.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 
@@ -139,13 +142,40 @@ include_example_plugins:
     YOURLS/404-if-not-found active; others as commented examples)?
   default: true
 
+# ---------------------------------------------------------------------------
+# CI and releases
+# ---------------------------------------------------------------------------
+ci_provider:
+  type: str
+  help: >-
+    Where the site's CI runs: github (GitHub Actions workflows in .github/), gitlab
+    (.gitlab-ci.yml) or none (no CI files; deploy and update from your machine).
+    CI deploys release tags (only targets with `ci = true`), opens weekly update
+    pull/merge requests and, with release_artifact, publishes release archives.
+    Switch later with `ym template update --data ci_provider=...`.
+  choices:
+    - github
+    - gitlab
+    - none
+  default: github
+
 ci_deploy:
   type: bool
   help: >-
-    Deploy prod from GitHub Actions (release tags trigger .github/workflows/deploy.yml)?
-    Writes `ci = true` on the prod target; after pushing the repo to GitHub, run
-    `ym ci setup prod` to store the deploy key and host keys. No: deploy from your
-    machine with `ym deploy prod` (enable CI later with `ym ci setup prod`).
+    Deploy prod from CI when a release tag is pushed? Writes `ci = true` on the prod
+    target. GitHub: after pushing the repo, `ym ci setup prod` stores the deploy key and
+    host keys. GitLab: set the environment's CI/CD variables by hand (see the site
+    README). No: deploy from your machine with `ym deploy prod`.
+  default: false
+  when: "{{ ci_provider != 'none' }}"
+
+release_artifact:
+  type: bool
+  help: >-
+    Publish every release tag as a reproducible archive of the built site
+    (`ym artifact build`: .tar.gz + .sha256 + .json metadata), for sites that another
+    system packages and deploys? Writes `[artifact] enabled = true` to site.toml and adds
+    a publish job to CI (GitHub releases, or GitLab's package registry + releases).
   default: false
 
 _message_after_copy: |
@@ -157,9 +187,18 @@ _message_after_copy: |
   {%- endif %}
     ym target config prod        # write the server-local config (secrets stay on the server)
     ym deploy prod --dry-run     # build and show what a deploy would change
+  {%- if ci_provider == 'github' %}
     ym repo create               # optional: keep the site on GitHub (private)
-  {%- if ci_deploy %}
+  {%-   if ci_deploy %}
     ym ci setup prod             # GitHub Actions deploys: deploy key + host keys
+  {%-   endif %}
+  {%- elif ci_provider == 'gitlab' %}
+  GitLab CI: push the repo to GitLab, then set up its environments and variables as
+  described under "GitLab CI" in README.md.
+  {%- endif %}
+  {%- if release_artifact %}
+  Release artifacts: `ym release --push` tags a release and CI publishes its archives
+  ({% if ci_provider == 'none' %}no CI: publish the output of `ym artifact build` yourself{% else %}see "Release artifacts" in README.md{% endif %}).
   {%- endif %}
 
   If you ran copier directly (not via `ym new` / `ym init`), first run `ym core` and

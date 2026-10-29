@@ -1,5 +1,6 @@
-# Build output (`ym build`)
+# Build output (`ym build`, `ym artifact build`)
 /dist/
+/dist-artifacts/
 
 # Python / uv
 .venv/

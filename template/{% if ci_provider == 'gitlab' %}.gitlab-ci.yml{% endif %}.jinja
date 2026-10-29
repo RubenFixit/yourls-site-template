@@ -1,0 +1,183 @@
+# Template-owned (yourls-site-template). GitLab CI for {{ site_name }}, run with yourls-manager.
+#
+# Jobs run only when their rules match; plain branch pushes start no pipeline.
+#   deploy-prod     final release tags v<yourls>-<rev> (`ym release --push`): `ym deploy prod`
+#                   in the "production" environment.
+#   deploy-staging  release candidates v<yourls>-<rev>-rc.<n>: `ym deploy staging` in "staging".
+#   Manual deploys: Build -> Pipelines -> Run pipeline with the variable TARGET=<name>
+#   (prod runs in "production", any other target in "staging").
+#   Only targets with `ci = true` in site.toml are deployed; others are skipped with a notice.
+#   `ym deploy` enforces each target's `accept` policy (prod: final release tags only).
+#   check-updates   scheduled pipeline (Build -> Pipeline schedules, e.g. weekly):
+#                   `ym update --check`, then `ym update` and a merge request.
+{%- if release_artifact %}
+#   publish         every release tag: `ym artifact build`, upload the files to the Generic
+#                   Package Registry and create a release linking them.
+{%- endif %}
+#
+# Setup (see "GitLab CI" in README.md): protect the tags v*; environments "production" and
+# "staging" with File-type variables DEPLOY_SSH_KEY (private key authorized on the host) and
+# DEPLOY_KNOWN_HOSTS (`ssh-keyscan -p <port> <host>`; verify the fingerprint); for
+# check-updates a masked variable YM_UPDATE_TOKEN (project access token, write_repository).
+
+stages: [deploy, publish, maintenance]
+
+default:
+  image: ghcr.io/astral-sh/uv:python3.13-bookworm
+
+variables:
+  GIT_DEPTH: "0"  # full history and tags: ym checks the release tag at HEAD
+  UV_LINK_MODE: copy
+
+# Release tags (`ym release`): v<yourls>-<rev> and v<yourls>-<rev>-rc.<n>
+.release-tags:
+  final: &final-tag '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+(\.[0-9]+)?-[1-9][0-9]*$/'
+  rc: &rc-tag '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+(\.[0-9]+)?-[1-9][0-9]*-rc\.[1-9][0-9]*$/'
+
+.deploy:
+  stage: deploy
+  timeout: 30m
+  script:
+    - |
+      # ci = true on [deploy.targets.<target>] opts the target in
+      state=$(python3 - "$DEPLOY_TARGET" <<'PY'
+      import sys, tomllib
+      with open("site.toml", "rb") as fh:
+          targets = tomllib.load(fh).get("deploy", {}).get("targets", {})
+      t = targets.get(sys.argv[1])
+      print("missing" if t is None else "ci" if t.get("ci") is True else "manual")
+      PY
+      )
+      if [ "$state" = missing ]; then
+        echo "no [deploy.targets.$DEPLOY_TARGET] in site.toml; nothing to deploy"
+        exit 0
+      elif [ "$state" != ci ]; then
+        echo "target $DEPLOY_TARGET is deployed by hand (no ci = true in site.toml); skipped"
+        exit 0
+      fi
+      if [ ! -f "${DEPLOY_SSH_KEY:-}" ] || [ ! -f "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+        echo "File-type variables DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must be set for environment $CI_ENVIRONMENT_NAME"
+        exit 1
+      fi
+      apt-get update -qq && apt-get install -y -qq --no-install-recommends rsync openssh-client >/dev/null
+      install -m 700 -d ~/.ssh
+      { cat "$DEPLOY_SSH_KEY"; echo; } > ~/.ssh/id_ed25519
+      chmod 600 ~/.ssh/id_ed25519
+      install -m 644 "$DEPLOY_KNOWN_HOSTS" ~/.ssh/known_hosts
+      printf 'Host *\n  IdentityFile ~/.ssh/id_ed25519\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+      chmod 600 ~/.ssh/config
+      uv sync --locked
+      uv run --locked ym deploy "$DEPLOY_TARGET"
+  after_script:
+    - rm -f ~/.ssh/id_ed25519
+
+deploy-prod:
+  extends: .deploy
+  environment:
+    name: production
+  resource_group: production
+  variables:
+    DEPLOY_TARGET: prod
+  rules:
+    - if: *final-tag
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET == "prod"'
+
+deploy-staging:
+  extends: .deploy
+  environment:
+    name: staging
+  resource_group: staging
+  rules:
+    - if: *rc-tag
+      variables:
+        DEPLOY_TARGET: staging
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET && $TARGET != "prod"'
+      variables:
+        DEPLOY_TARGET: $TARGET
+{%- if release_artifact %}
+
+publish:
+  stage: publish
+  timeout: 20m
+  rules:
+    - if: *final-tag
+    - if: *rc-tag
+  script:
+    - uv sync --locked
+    - uv run --locked ym artifact build --ref "$CI_COMMIT_TAG" --out /tmp/artifacts
+    - |
+      python3 - <<'PY'
+      # Upload to the Generic Package Registry (package = site slug, version = tag without
+      # "v"), then create the release with links to the files. Rc tags are published too, so
+      # consumers can qualify candidates.
+      import glob, json, os, sys, urllib.error, urllib.request
+
+      api, project = os.environ["CI_API_V4_URL"], os.environ["CI_PROJECT_ID"]
+      token, tag = os.environ["CI_JOB_TOKEN"], os.environ["CI_COMMIT_TAG"]
+
+      def call(url, data, method, ctype="application/octet-stream"):
+          req = urllib.request.Request(url, data=data, method=method,
+                                       headers={"JOB-TOKEN": token, "Content-Type": ctype})
+          with urllib.request.urlopen(req) as resp:
+              return resp.read()
+
+      files = sorted(glob.glob("/tmp/artifacts/*"))
+      meta = json.load(open(next(f for f in files if f.endswith(".json"))))
+      base = f"{api}/projects/{project}/packages/generic/{meta['site']}/{meta['version']}"
+      links = []
+      for path in files:
+          name = os.path.basename(path)
+          with open(path, "rb") as fh:
+              call(f"{base}/{name}", fh.read(), "PUT")
+          print(f"uploaded {name}")
+          links.append({"name": name, "url": f"{base}/{name}", "link_type": "package"})
+      release = {
+          "tag_name": tag,
+          "name": tag + (" (release candidate)" if meta["rc"] else ""),
+          "description": os.environ.get("CI_COMMIT_TAG_MESSAGE") or tag,
+          "assets": {"links": links},
+      }
+      try:
+          call(f"{api}/projects/{project}/releases", json.dumps(release).encode(), "POST",
+               "application/json")
+      except urllib.error.HTTPError as exc:
+          if exc.code != 409:
+              raise
+          print(f"release {tag} already exists; files uploaded, release left as it is")
+          sys.exit(0)
+      print(f"created release {tag}")
+      PY
+{%- endif %}
+
+check-updates:
+  stage: maintenance
+  timeout: 20m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  script:
+    - uv sync --locked
+    - |
+      set +e
+      uv run --locked ym update --check > /tmp/check.txt 2>&1
+      code=$?
+      set -e
+      cat /tmp/check.txt
+      if [ "$code" -eq 0 ]; then exit 0; fi
+      if [ "$code" -ne 10 ]; then exit "$code"; fi
+      if [ -z "${YM_UPDATE_TOKEN:-}" ]; then
+        echo "updates available, but YM_UPDATE_TOKEN is not set: can't open a merge request"
+        exit 1
+      fi
+      # core first, then plugins; core leaves yourls/ modified (uncommitted) in this
+      # throwaway checkout, so --force lets the plugin step past the dirty-tree guard.
+      uv run --locked ym update --force
+      git config user.name "ym check-updates"
+      git config user.email "ym-check-updates@noreply.$CI_SERVER_HOST"
+      git checkout -q -B ym/upstream-updates
+      git add -A
+      git commit -q -m "chore: update YOURLS core/plugins" -m "$(cat /tmp/check.txt)"
+      url="${CI_REPOSITORY_URL/gitlab-ci-token:${CI_JOB_TOKEN}@/oauth2:${YM_UPDATE_TOKEN}@}"
+      git push --force "$url" HEAD:refs/heads/ym/upstream-updates \
+        -o merge_request.create -o merge_request.target="$CI_DEFAULT_BRANCH" \
+        -o merge_request.title="chore: update YOURLS core/plugins" \
+        -o merge_request.label=dependencies -o merge_request.remove_source_branch

@@ -25,7 +25,9 @@ jobs:
               --data deploy_user=ruben
               --data php_binary=/usr/local/php83/bin/php
               --data ci_deploy=true
-            check: --expect-404-plugin --expect-target --expect-ci
+              --data release_artifact=true
+              --data repo_url=https://github.com/RubenFixit/go-links
+            check: --expect-404-plugin --expect-target --expect-ci --expect-artifact
           - name: minimal
             data: >-
               --data site_name="Minimal Links"
@@ -47,6 +49,31 @@ jobs:
               --data deploy_type=sftp
               --data include_example_plugins=false
             check: --expect-type sftp
+          - name: gitlab
+            data: >-
+              --data site_name="GitLab Links"
+              --data site_url=https://go.example.dev
+              --data ci_provider=gitlab
+              --data deploy_host=example.dreamhost.com
+              --data deploy_user=ruben
+              --data ci_deploy=true
+            check: --expect-404-plugin --expect-target --expect-ci --expect-provider gitlab
+          - name: gitlab-artifact-only
+            data: >-
+              --data site_name="App Backend"
+              --data site_url=https://links.example.dev
+              --data ci_provider=gitlab
+              --data release_artifact=true
+              --data repo_url=https://gitlab.example.com/team/links
+            check: --expect-404-plugin --expect-provider gitlab --expect-artifact
+          - name: no-ci
+            data: >-
+              --data site_name="Local Links"
+              --data site_url=https://l.example.org
+              --data ci_provider=none
+              --data release_artifact=true
+              --data include_example_plugins=false
+            check: --expect-provider none --expect-artifact
     name: render (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v7
@@ -69,12 +96,51 @@ jobs:
       - name: Check rendered site
         run: python3 scripts/check_render.py "$RUNNER_TEMP/site" ${{ matrix.check }}
 
+      - name: CI files are valid YAML
+        run: |
+          shopt -s nullglob
+          for f in "$RUNNER_TEMP"/site/.gitlab-ci.yml "$RUNNER_TEMP"/site/.github/workflows/*.yml; do
+            uv run --no-project --with pyyaml python -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' "$f"
+            echo "ok: ${f#"$RUNNER_TEMP"/site/}"
+          done
+
       - name: copier update is a clean no-op
         working-directory: ${{ runner.temp }}/site
         run: |
           git init -q -b main && git add -A && git commit -qm render
           uvx copier update --defaults --vcs-ref HEAD
           git status --porcelain
+          test -z "$(git status --porcelain)"
+
+  switch-provider:
+    # ci_provider is recorded in .copier-answers.yml; `copier update --data ci_provider=...`
+    # (what `ym template update --data` runs) must swap the CI files, not leave both.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.3.2
+
+      - name: github -> gitlab -> none
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          site="$RUNNER_TEMP/site"
+          uvx copier copy --defaults --vcs-ref HEAD --data site_name=Switch \
+            --data site_url=https://go.example.com "$GITHUB_WORKSPACE" "$site"
+          cd "$site"
+          git init -q -b main && git add -A && git commit -qm render
+          uvx copier update --defaults --vcs-ref HEAD --data ci_provider=gitlab --data release_artifact=true
+          test -f .gitlab-ci.yml && test ! -e .github
+          grep -q 'ym artifact build' .gitlab-ci.yml
+          git add -A && git commit -qm gitlab
+          uvx copier update --defaults --vcs-ref HEAD --data ci_provider=none
+          test ! -e .gitlab-ci.yml && test ! -e .github
+          git add -A && git commit -qm none
+          uvx copier update --defaults --vcs-ref HEAD
           test -z "$(git status --porcelain)"
 
   question-defaults:

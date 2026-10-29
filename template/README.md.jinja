@@ -3,6 +3,7 @@
 YOURLS site for <{{ site_url }}>, managed with [yourls-manager](https://github.com/RubenFixit/yourls-manager) (`ym`) and generated from [yourls-site-template](https://github.com/RubenFixit/yourls-site-template).
 
 The complete site configuration lives in this repo. Secrets live only on the server.
+{%- if repo_url %} Repository: <{{ repo_url }}>.{% endif %}
 
 ## Layout
 
@@ -14,7 +15,11 @@ The complete site configuration lives in this repo. Secrets live only on the ser
 | `overlay/` | template + you | Copied over `yourls/` at build time (config shim, `health.php`, `.htaccess`, branding plugin, local plugin patches). |
 | `server/config.example.php` | template | Starting point for the server-local config. |
 | `tests/redirects.toml` | you | Redirect expectations checked by `ym verify`. |
-| `.github/` | template | Deploy on tag, weekly update PRs, Dependabot. |
+{%- if ci_provider == 'github' %}
+| `.github/` | template | GitHub Actions: deploy on tag, weekly update PRs{% if release_artifact %}, publish release artifacts{% endif %}; Dependabot. |
+{%- elif ci_provider == 'gitlab' %}
+| `.gitlab-ci.yml` | template | GitLab CI: deploy on tag, weekly update merge requests{% if release_artifact %}, publish release artifacts{% endif %}. |
+{%- endif %}
 | `adopt-review/` | `ym adopt` | Only after adopting an existing install: report + files to merge by hand. Never deployed. |
 
 Files marked *template* are updated by `ym template update` (local edits are merged, conflicts are marked). `site.toml`, `tests/redirects.toml` and the branding assets are never touched by updates.
@@ -101,9 +106,11 @@ ym update --commit                   # core to the latest release, plugins to ne
 git push
 ym release --push                    # tag v<yourls>-<rev> and deploy it (see below)
 ```
-
+{% if ci_provider == 'github' %}
 The `check-updates` workflow does this weekly and opens a pull request.
-
+{% elif ci_provider == 'gitlab' %}
+The `check-updates` CI job does this on a pipeline schedule and opens a merge request (see [GitLab CI](#gitlab-ci)).
+{% endif %}
 ### Releases
 
 Release tags are `v<YOURLS version>-<revision>`, e.g. `v1.10.6-1`, `v1.10.6-2`; the revision counts site changes and restarts at 1 when YOURLS is updated. Release candidates add `-rc.<n>` (`v1.10.6-3-rc.1`).
@@ -118,7 +125,51 @@ ym release list               # releases and where each one is deployed
 
 The tag message holds release notes built from `yourls.lock.json` (YOURLS and plugin changes) and the commit log. Each target's `accept` setting decides what it takes: prod has `accept = "release"` (only final release tags, clean tree; `--force` overrides and is recorded), other targets default to `"any"`. `ym deploy` refuses uncommitted changes everywhere unless you pass `--allow-dirty`, and after each deploy moves the local branch `deployed/<target>` to the deployed commit (`[release] push_markers = true` pushes it).
 
-### GitHub (optional)
+{% if release_artifact %}### Release artifacts
+
+Every release is also published as an archive of the built site, for systems that package and deploy it themselves. `[artifact]` in `site.toml` sets the formats and file names; `ym artifact build` builds them into `dist-artifacts/`:
+
+```sh
+ym release --push                    # tag the release{% if ci_provider != 'none' %}; CI publishes its artifacts{% endif %}
+ym artifact build                    # the same files locally (HEAD must carry a release tag)
+ym artifact build --ref v1.10.6-1    # rebuild an older release: identical bytes
+```
+
+| File | Contents |
+|---|---|
+| `{{ site_slug }}-<version>.tar.gz` | The built web root (`yourls/` + `overlay/`), no top-level directory. Rebuilding a tag gives byte-identical archives. |
+| `{{ site_slug }}-<version>.tar.gz.sha256` | `sha256sum` format. |
+| `{{ site_slug }}-<version>.json` | Release metadata: site, version, tag, rc, commit, locked core and plugin commits, yourls-manager version, file hashes. |
+
+`<version>` is the tag without the `v` (`1.10.6-2`, `1.10.6-3-rc.1`).
+{%- if ci_provider == 'github' %} The `publish` workflow attaches the files to a GitHub release for every release tag (rc tags as pre-releases).
+{%- elif ci_provider == 'gitlab' %} The `publish` CI job uploads them to the project's Generic Package Registry (package `{{ site_slug }}`, version `<version>`) and creates a release linking them; turn on *Settings → Packages and registries → Do not allow duplicate generic packages* so a published version can't be replaced.
+{%- else %} This site has no CI, so publish the files yourself (or add CI with `ym template update --data ci_provider=github`).
+{%- endif %}
+
+#### Consuming the artifact
+
+{%- set rel_base = repo_url ~ '/releases/download' if repo_url else 'https://github.com/<owner>/<repo>/releases/download' %}
+{%- if repo_url and '://' in repo_url %}
+{%-   set host = repo_url.split('://')[1].split('/', 1)[0] %}
+{%-   set path = repo_url.split('://')[1].split('/', 1)[1] %}
+{%-   set pkg_base = repo_url.split('://')[0] ~ '://' ~ host ~ '/api/v4/projects/' ~ path | replace('/', '%2F') ~ '/packages/generic/' ~ site_slug %}
+{%- else %}
+{%-   set pkg_base = 'https://<gitlab host>/api/v4/projects/<project id or url-encoded path>/packages/generic/' ~ site_slug %}
+{%- endif %}
+
+1. Pin a release: its version, the archive URL and the archive's sha256 (from the `.sha256` file or the `.json`).
+{%- if ci_provider == 'github' %}
+   URL: `{{ rel_base }}/v<version>/{{ site_slug }}-<version>.tar.gz`
+{%- elif ci_provider == 'gitlab' %}
+   URL: `{{ pkg_base }}/<version>/{{ site_slug }}-<version>.tar.gz` (private projects: send a `PRIVATE-TOKEN`, `DEPLOY-TOKEN` or `JOB-TOKEN` header).
+{%- endif %}
+2. Download it and verify the hash before using it (`sha256sum -c {{ site_slug }}-<version>.tar.gz.sha256`).
+3. Extract it into an empty web root (`tar -xzf ... -C <web root>`); the archive root is the web root.
+4. Provide the server-local config: put it at `<parent of web root>/yourls-config/{{ site_slug }}.php`, or point the environment variable `YOURLS_CONFIG_FILE` at it (the shim in `user/config.php` reads that first). Start from `server/config.example.php`. The archive never contains secrets.
+5. On a new or upgraded YOURLS version, open `/admin/install.php` or `/admin/upgrade.php` once, and activate the plugins marked `active = true` in `site.toml` (the `.json` lists the vendored ones).
+
+{% endif %}{% if ci_provider == 'github' %}### GitHub (optional)
 
 Deploys run from your machine; a Git remote is optional. To keep the site on GitHub (needs the [GitHub CLI](https://cli.github.com)):
 
@@ -136,11 +187,29 @@ ym ci status                         # check the environments and secrets
 
 Then pushing a release tag runs `.github/workflows/deploy.yml`: final tags deploy `prod` in the `production` environment, `-rc.<n>` tags deploy `staging` in the `staging` environment. Manual runs can pick any target. Only targets with `ci = true` in site.toml are deployed; the others are skipped with a notice. The environments hold the secrets `DEPLOY_SSH_KEY` (private key authorized on the host) and `DEPLOY_KNOWN_HOSTS` (the host's keys).
 
-### Roll back
+{% elif ci_provider == 'gitlab' %}### GitLab CI
+
+`.gitlab-ci.yml` runs yourls-manager in the `ghcr.io/astral-sh/uv` image (Docker executor). Deploys run from your machine until you opt a target in with `ci = true` in `site.toml`. `ym repo create` and `ym ci` are GitHub-only, so set GitLab up by hand:
+
+1. Push the repo to a GitLab project and protect the tags `v*` (*Settings → Repository → Protected tags*), so protected variables reach release-tag pipelines.
+2. Create the environments `production` (target `prod`) and `staging` (every other target) under *Operate → Environments*.
+3. For each environment, add two **File**-type, protected CI/CD variables scoped to it (*Settings → CI/CD → Variables*):
+   - `DEPLOY_SSH_KEY`: a private key (e.g. `ssh-keygen -t ed25519 -N "" -C ym-ci-{{ site_slug }}`) whose public half is in `~/.ssh/authorized_keys` on the host. Use a key only CI has.
+   - `DEPLOY_KNOWN_HOSTS`: the host's keys, `ssh-keyscan -p <port> <host>`; compare the fingerprints with `ssh-keygen -lf` against a trusted source.
+4. Set `ci = true` on the target in `site.toml`, commit and push.
+5. Weekly updates: add a pipeline schedule (*Build → Pipeline schedules*) and a masked variable `YM_UPDATE_TOKEN` holding a project access token with the `write_repository` scope (Developer role). The `check-updates` job pushes `ym/upstream-updates` and opens a merge request.
+
+Pushing a release tag then deploys: final tags deploy `prod` in `production`, `-rc.<n>` tags deploy `staging` in `staging`. To deploy by hand from CI, run a pipeline (*Build → Pipelines → Run pipeline*) with the variable `TARGET=<name>`. Targets without `ci = true` are skipped with a message.
+
+{% else %}### CI
+
+This site has no CI files: deploys and update checks run from your machine (`ym deploy`, `ym update --check`). Add GitHub Actions or GitLab CI later with `ym template update --data ci_provider=github` (or `gitlab`).
+
+{% endif %}### Roll back
 
 Rollback is manual and Git-based:
 
-1. Check out the last good release and deploy it: `git checkout v<previous> && ym deploy prod` (or run the deploy workflow on that tag).
+1. Check out the last good release and deploy it: `git checkout v<previous> && ym deploy prod`{% if ci_provider == 'github' %} (or run the deploy workflow on that tag){% elif ci_provider == 'gitlab' %} (or run a pipeline on that tag with `TARGET=prod`){% endif %}.
 {%- if deploy_type == 'sftp' %}
 2. If a DB upgrade or bad data needs undoing, restore the database from your host's backups (SFTP deploys don't dump the database).
 {%- else %}
@@ -149,6 +218,6 @@ Rollback is manual and Git-based:
 
 ### Update the tooling
 
-- Template files (workflows, shim, `.htaccess`, ...): `ym template update` (needs a clean Git tree), then review the diff and commit. Answers are stored in `.copier-answers.yml`. Don't edit it by hand.
+- Template files (CI files, shim, `.htaccess`, ...): `ym template update` (needs a clean Git tree), then review the diff and commit. Answers are stored in `.copier-answers.yml`. Don't edit it by hand; change an answer with `--data`, e.g. `ym template update --data ci_provider=gitlab` (switches the CI files) or `--data release_artifact=true` (adds the publish job; add the `[artifact]` table to `site.toml` yourself, since updates never touch that file).
 - yourls-manager pin used by CI: `ym template update --manager-version vX.Y.Z` (bumps `pyproject.toml` and runs `uv lock`), then review and commit.
 - Your global `ym`: `uv tool upgrade yourls-manager`.

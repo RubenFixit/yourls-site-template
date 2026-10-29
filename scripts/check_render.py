@@ -2,6 +2,7 @@
 
 Usage: python scripts/check_render.py <rendered-site-dir> [--expect-404-plugin]
        [--expect-target] [--expect-type rsync|sftp] [--expect-ci]
+       [--expect-provider github|gitlab|none] [--expect-artifact]
 
 Stdlib only. Checks expected files, TOML parsing and site.toml shape, leftover Jinja
 markers (outside GitHub Actions ${{ }} expressions), and `php -l` when php is available.
@@ -31,11 +32,19 @@ EXPECTED = [
     "overlay/user/plugins/site-branding/assets/brand.css",
     "server/config.example.php",
     "tests/redirects.toml",
-    ".github/workflows/deploy.yml",
-    ".github/workflows/check-updates.yml",
-    ".github/dependabot.yml",
 ]
-SITE_KEYS = {"site", "core", "plugins", "build", "deploy", "release"}
+# CI files per ci_provider; the other providers' files must not be rendered.
+CI_FILES = {
+    "github": [
+        ".github/workflows/deploy.yml",
+        ".github/workflows/check-updates.yml",
+        ".github/dependabot.yml",
+    ],
+    "gitlab": [".gitlab-ci.yml"],
+    "none": [],
+}
+GITHUB_PUBLISH = ".github/workflows/publish.yml"
+SITE_KEYS = {"site", "core", "plugins", "build", "deploy", "release", "artifact"}
 TARGET_KEYS = {
     "type", "host", "user", "port", "path", "php", "config_file",
     "backup_dir", "protect", "backup_keep", "url", "state_dir", "accept", "ci",
@@ -51,13 +60,31 @@ def main() -> int:
     ap.add_argument("--expect-target", action="store_true")
     ap.add_argument("--expect-type", choices=["rsync", "sftp"], default="rsync")
     ap.add_argument("--expect-ci", action="store_true", help="prod must have ci = true")
+    ap.add_argument("--expect-provider", choices=sorted(CI_FILES), default="github")
+    ap.add_argument(
+        "--expect-artifact", action="store_true", help="[artifact] enabled + a publish job"
+    )
     args = ap.parse_args()
     root: Path = args.site
     errors: list[str] = []
 
-    for rel in EXPECTED:
+    expected = EXPECTED + CI_FILES[args.expect_provider]
+    if args.expect_artifact and args.expect_provider == "github":
+        expected.append(GITHUB_PUBLISH)
+    for rel in expected:
         if not (root / rel).is_file():
             errors.append(f"missing file: {rel}")
+    unexpected = {f for files in CI_FILES.values() for f in files} | {GITHUB_PUBLISH}
+    for rel in sorted(unexpected - set(expected)):
+        if (root / rel).exists():
+            errors.append(f"unexpected file for ci_provider={args.expect_provider}: {rel}")
+    if args.expect_provider != "github" and (root / ".github").exists():
+        errors.append(".github/ rendered although ci_provider is not github")
+    gitlab_ci = root / ".gitlab-ci.yml"
+    if gitlab_ci.is_file():
+        publishes = "ym artifact build" in gitlab_ci.read_text("utf-8")
+        if publishes is not args.expect_artifact:
+            errors.append(f".gitlab-ci.yml: publish job present = {publishes}, expected {args.expect_artifact}")
     for bad in ("dist", "yourls"):
         if (root / bad).exists():
             errors.append(f"unexpected path rendered: {bad}")
@@ -83,6 +110,23 @@ def main() -> int:
             errors.append("site.toml: [site].url invalid")
         if not re.fullmatch(r"\d+\.\d+(\.\d+)?", site.get("core", {}).get("version", "")):
             errors.append("site.toml: [core].version invalid")
+        artifact = site.get("artifact")
+        if args.expect_artifact:
+            if not (artifact and artifact.get("enabled") is True):
+                errors.append("site.toml: [artifact] enabled = true expected")
+            elif not set(artifact.get("formats", [])) <= {"tar.gz", "zip"}:
+                errors.append("site.toml: [artifact].formats invalid")
+        elif artifact is not None:
+            errors.append("site.toml: [artifact] should be commented out")
+        else:
+            text = (root / "site.toml").read_text("utf-8")
+            block = re.search(r"^# \[artifact\]\n(?:^# .*\n?)+", text, re.M)
+            try:
+                art = tomllib.loads(re.sub(r"^# ", "", block[0], flags=re.M))["artifact"]
+                if art.get("enabled") is not True:
+                    errors.append("site.toml: commented-out [artifact] should enable it")
+            except (TypeError, tomllib.TOMLDecodeError, KeyError) as exc:
+                errors.append(f"site.toml: commented-out [artifact] missing or invalid: {exc}")
         names = [p.get("name") for p in site.get("plugins", [])]
         if "site-branding" not in names:
             errors.append("site.toml: site-branding plugin missing")

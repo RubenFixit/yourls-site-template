@@ -90,6 +90,23 @@ active = true
 out = "dist"                     # build output directory (gitignored)
 
 # ---------------------------------------------------------------------------
+# Release artifacts: `ym artifact build` builds a release tag into reproducible
+# archives of the web root (+ <archive>.sha256 and <name>.json metadata) in
+# dist-artifacts/, for sites that another system packages and deploys.
+{%- if ci_provider != 'none' %}
+# `enabled = true` makes CI publish them on every release tag and `ym doctor` check that it does.
+{%- else %}
+# `enabled = true` tells `ym doctor` that releases are published (this site has no CI to do it).
+{%- endif %}
+#   formats = "tar.gz" and/or "zip"; name: {slug}, {version} (tag without "v"), {tag}
+# ---------------------------------------------------------------------------
+{%- set a = '' if release_artifact else '# ' %}
+{{ a }}[artifact]
+{{ a }}enabled = true
+{{ a }}formats = ["tar.gz"]
+{{ a }}name    = "{slug}-{version}"     # e.g. {{ site_slug }}-1.10.6-1.tar.gz
+
+# ---------------------------------------------------------------------------
 # Deploy targets. `ym deploy <name>`.
 #   type "rsync": rsync + PHP CLI over SSH (or the local filesystem when host is
 #                 omitted). Backs up the DB, runs DB upgrades and plugin activation.
