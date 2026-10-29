@@ -10,8 +10,8 @@
 # (`copier update` never overwrites it). Consumed by yourls-manager (`ym`).
 #
 # Workflow: edit this file, then
-#   uv run ym sync          # vendor/remove plugins to match [[plugins]]
-#   uv run ym core --version X.Y.Z   # move core (also rewrites [core].version)
+#   uv run ym plugin sync   # vendor/remove plugins to match [[plugins]]
+#   uv run ym core X.Y.Z    # move core (also rewrites [core].version)
 #   uv run ym deploy prod
 # Unknown keys produce a warning; invalid values produce an error naming the key.
 
@@ -22,7 +22,7 @@ url  = "{{ site_url }}"        # public base URL, no trailing slash
 
 [core]
 repo    = "https://github.com/YOURLS/YOURLS.git"   # upstream git repo (default)
-version = "{{ yourls_version }}"                    # exact tag ("latest" is NOT allowed here; use `ym core --version latest`)
+version = "{{ yourls_version }}"                    # exact tag ("latest" is NOT allowed here; use `ym core latest`)
 # Glob patterns relative to the core repo root that are not vendored into yourls/.
 # LICENSE and readme.html are kept unless listed explicitly.
 exclude = [".github", ".git*", "tests", "*.md", "phpunit.xml.dist"]
@@ -31,7 +31,7 @@ exclude = [".github", ".git*", "tests", "*.md", "phpunit.xml.dist"]
 # Plugins. One [[plugins]] table per plugin directory under user/plugins/.
 #   name   = directory name under user/plugins (required)
 #   repo   = git URL; omit for plugins shipped with core or provided by overlay/
-#   ref    = branch, tag, "HEAD", or a 40-char sha (default "HEAD"); `ym sync` locks the commit
+#   ref    = branch, tag, "HEAD", or a 40-char sha (default "HEAD"); `ym plugin sync` locks the commit
 #   path   = subdirectory inside the repo that contains plugin.php (default ".")
 #   active = whether `ym deploy` activates it (default true); the active set on the
 #            server is made exactly equal to the active plugins listed here
@@ -97,13 +97,13 @@ out = "dist"                     # build output directory (gitignored)
 #                 deployed in <state_dir>/manifest.json and only deletes files it
 #                 deployed itself. No DB backup (use your host's backup tool); YOURLS
 #                 install/upgrade and plugin activation happen in the browser (ym
-#                 prints the links). Login: SSH key (`ym ssh-setup prod`) or the
+#                 prints the links). Login: SSH key (`ym target login prod`) or the
 #                 password in $YM_PROD_PASSWORD (else asked on a terminal).
 # The server-local YOURLS config (secrets) must exist at config_file before the
-# first deploy: `ym server-config prod`.
+# first deploy: `ym target config prod`.
 # ---------------------------------------------------------------------------
 {%- if not deploy_host %}
-# Not configured yet: uncomment and fill in.
+# Not configured yet: run `ym target add prod`, or uncomment and fill in.
 {%-   if deploy_type == 'rsync' %} Do NOT leave `host` out unless you
 # really mean a local-filesystem target.
 {%-   endif %}

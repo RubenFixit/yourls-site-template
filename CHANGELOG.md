@@ -1,9 +1,20 @@
 # Changelog
 
-All notable changes to this template. Sites pick them up with `ym template-update`.
+All notable changes to this template. Sites pick them up with `ym template update`.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are git tags.
 
 ## [Unreleased]
+
+### Changed
+- New sites pin yourls-manager `v0.7.0` and use its command names everywhere (README,
+  site.toml comments, config example, copier messages): `ym target login` / `ym target
+  config` / `ym target add`, `ym init`, `ym plugin sync`, `ym core VERSION`,
+  `ym update --check`, `ym doctor --local`, `ym template update`, `ym release promote` /
+  `ym release list`.
+- `check-updates.yml`: `ym update --check`, then one `ym update --force` instead of
+  `ym core --version latest` + `ym sync --update --force`.
+- No deploy host given: the messages and site.toml point at `ym target add prod` instead
+  of uncommenting the prod block by hand.
 
 ## [0.5.0] - 2026-10-29
 

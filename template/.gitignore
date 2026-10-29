@@ -8,7 +8,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Leftovers from an interrupted `ym core` / `ym sync` swap
+# Leftovers from an interrupted `ym core` / `ym plugin sync` swap
 /.yourls.old-*
 /.yourls.new-*
 

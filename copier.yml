@@ -56,7 +56,7 @@ yourls_version:
   type: str
   help: >-
     YOURLS core tag to start from (written to site.toml [core].version).
-    "latest" is not allowed here; use `ym core --version latest` later.
+    "latest" is not allowed here; use `ym core latest` later.
   default: "1.10.6"
   validator: >-
     {% if not (yourls_version | regex_search('^[0-9]+\.[0-9]+(\.[0-9]+)?$')) %}yourls_version must be a release tag like 1.10.6{% endif %}
@@ -64,7 +64,7 @@ yourls_version:
 manager_version:
   type: str
   help: yourls-manager git tag to pin in pyproject.toml ([tool.uv.sources])
-  default: v0.6.0
+  default: v0.7.0
   validator: >-
     {% if not (manager_version | regex_search('^v[0-9]+\.[0-9]+\.[0-9]+$')) %}manager_version must be a tag like v0.1.0{% endif %}
 
@@ -153,17 +153,17 @@ _message_after_copy: |
 
   Next steps (in {{ _copier_conf.dst_path }}):
   {%- if not deploy_host %}
-    (first: uncomment and fill in [deploy.targets.prod] in site.toml)
+    ym target add prod           # first: where and how the site deploys
   {%- endif %}
-    ym server-config prod        # write the server-local config (secrets stay on the server)
+    ym target config prod        # write the server-local config (secrets stay on the server)
     ym deploy prod --dry-run     # build and show what a deploy would change
     ym repo create               # optional: keep the site on GitHub (private)
   {%- if ci_deploy %}
     ym ci setup prod             # GitHub Actions deploys: deploy key + host keys
   {%- endif %}
 
-  If you ran copier directly (not via `ym new` / `ym setup`), first run `ym core` and
-  `ym sync` to vendor YOURLS and plugins, then `git init -b main` and commit.
-  Adopting an existing install? Run `ym adopt --from-target prod` before server-config.
+  If you ran copier directly (not via `ym new` / `ym init`), first run `ym core` and
+  `ym plugin sync` to vendor YOURLS and plugins, then `git init -b main` and commit.
+  Adopting an existing install? Run `ym adopt --from-target prod` before `ym target config`.
 
   Full instructions: https://github.com/RubenFixit/yourls-manager#readme

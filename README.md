@@ -2,7 +2,7 @@
 
 This is the [Copier](https://copier.readthedocs.io) template that
 [**yourls-manager**](https://github.com/RubenFixit/yourls-manager) (`ym`) uses to create and
-update YOURLS site repos. `ym new`, `ym setup` and `ym template-update` run it for you, so you
+update YOURLS site repos. `ym new`, `ym init` and `ym template update` run it for you, so you
 normally never need to run Copier yourself.
 
 **For installation, setup, adopting an existing install, deploying and updating, see the
@@ -10,7 +10,7 @@ normally never need to run Copier yourself.
 
 ```sh
 uv tool install git+https://github.com/RubenFixit/yourls-manager
-ym setup            # or: ym new my-site
+ym init             # or: ym new my-site
 ```
 
 The rest of this page is for people working on the template itself.
@@ -29,7 +29,7 @@ The rest of this page is for people working on the template itself.
 
 ### File ownership
 
-`copier update` (run by `ym template-update`) does a 3-way merge of **template-owned** files
+`copier update` (run by `ym template update`) does a 3-way merge of **template-owned** files
 and never touches **site-owned** ones (`_skip_if_exists` in `copier.yml`).
 
 | Template-owned (updated by `copier update`) | Site-owned (rendered once) |
@@ -41,7 +41,7 @@ and never touches **site-owned** ones (`_skip_if_exists` in `copier.yml`).
 | `.github/workflows/*.yml`, `.github/dependabot.yml` | |
 
 The template doesn't render `yourls/`, `yourls.lock.json`, `uv.lock` or `adopt-review/`.
-`ym` and `uv` write them. `ym server-config` fills in placeholders in
+`ym` and `uv` write them. `ym target config` fills in placeholders in
 `server/config.example.php` by matching `define( 'NAME', ... );` lines and the
 `$yourls_user_passwords` block, so keep that format when you edit the file.
 
@@ -72,7 +72,7 @@ tool, run `ym new /tmp/demo-site --template . --vcs-ref HEAD`.
 ### Release
 
 Add a `CHANGELOG.md` entry and tag `vX.Y.Z`. Sites pick up the new version with
-`ym template-update`.
+`ym template update`.
 
 ## License
 

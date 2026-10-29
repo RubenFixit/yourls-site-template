@@ -1,6 +1,6 @@
 # Template-owned (yourls-site-template). Weekly upstream check for {{ site_name }}.
 #
-# `ym check` exits 10 when YOURLS core or a plugin ref has a newer commit/tag.
+# `ym update --check` exits 10 when YOURLS core or a plugin ref has a newer commit/tag.
 # Then core and plugins are re-vendored and a pull request is opened. Review the
 # diff of yourls/, merge, tag, and the deploy workflow ships it.
 #
@@ -40,7 +40,7 @@ jobs:
         id: check
         run: |
           set +e
-          uv run --locked ym check > "$RUNNER_TEMP/check.txt" 2>&1
+          uv run --locked ym update --check > "$RUNNER_TEMP/check.txt" 2>&1
           code=$?
           set -e
           cat "$RUNNER_TEMP/check.txt"
@@ -52,10 +52,9 @@ jobs:
       - name: Apply updates
         if: steps.check.outputs.code == '10'
         run: |
-          uv run --locked ym core --version latest
-          # core leaves yourls/ modified (uncommitted) in this throwaway checkout;
-          # --force lets sync proceed past the dirty-tree guard.
-          uv run --locked ym sync --update --force
+          # core first, then plugins; core leaves yourls/ modified (uncommitted) in this
+          # throwaway checkout, so --force lets the plugin step past the dirty-tree guard.
+          uv run --locked ym update --force
           {
             echo "Automated update by the check-updates workflow."
             echo
