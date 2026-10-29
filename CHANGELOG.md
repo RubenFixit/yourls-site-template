@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are g
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-29
+
 ### Added
 - `ci_deploy` question (default no): writes `ci = true` on the prod target. The deploy
   workflow only deploys targets with `ci = true`; others are skipped with a notice, so sites
