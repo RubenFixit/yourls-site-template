@@ -27,4 +27,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# NOTE: yourls/ (vendored core + plugins) and uv.lock ARE committed.
+# NOTE: yourls/ (vendored core + plugins) and uv.lock ARE committed. yourls/ must be
+# committed exactly as `ym core` / `ym plugin sync` vendored it (yourls.lock.json hashes
+# every file), so none of the patterns above apply inside it (e.g. a plugin's *.sql file).
+!/yourls/**

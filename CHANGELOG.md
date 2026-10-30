@@ -14,6 +14,9 @@ All notable changes to this template. Sites pick them up with `ym template updat
 - GitLab `check-updates`: when `ym/upstream-updates` already holds the same files, the job leaves the branch and its merge request alone instead of force-pushing an identical commit.
 - The CI files live at their real paths (`template/.github/`, `template/.gitlab-ci.yml.jinja`) and `_exclude` in `copier.yml` leaves out the unused provider's files, instead of conditional file names. Rendered sites are unchanged.
 
+### Fixed
+- `.gitignore` no longer applies inside `yourls/`: the unanchored `*.sql` rule kept a plugin's `mysql_levenshtein_function.sql` (fuzzy-keywords) out of Git, so every clean checkout failed the lock's drift check. Vendored files are now always committed (`!/yourls/**`).
+
 ## [0.7.1] - 2026-10-30
 
 ### Changed
