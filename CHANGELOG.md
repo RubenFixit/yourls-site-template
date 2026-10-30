@@ -4,6 +4,10 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
+GitLab CI hardening, tested end to end on gitlab.com. New sites still pin yourls-manager `v0.8.1`.
+
 ### Added
 - GitLab CI: a `check` job (`ym doctor --local`, `ym build`) on merge requests and on pushes to branches without an open merge request.
 - GitLab CI: questions `gitlab_image` (default `ghcr.io/astral-sh/uv:python3.13-bookworm`, as before) and `gitlab_runner_tag` (default none). They become the defaults of the CI/CD variables `YM_CI_IMAGE` and `YM_RUNNER_TAG`, which project variables of the same name override.
