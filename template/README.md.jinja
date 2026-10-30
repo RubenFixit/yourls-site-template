@@ -189,7 +189,16 @@ Then pushing a release tag runs `.github/workflows/deploy.yml`: final tags deplo
 
 {% elif ci_provider == 'gitlab' %}### GitLab CI
 
-`.gitlab-ci.yml` runs yourls-manager in a container image (Docker executor; see below for the image and runner tag). Deploys run from your machine until you opt a target in with `ci = true` in `site.toml`. `ym repo create` and `ym ci` are GitHub-only, so set GitLab up by hand:
+`.gitlab-ci.yml` runs yourls-manager in a container image (Docker executor; see below for the image and runner tag). Deploys run from your machine until you opt a target in with `ci = true` in `site.toml`. With the [GitLab CLI](https://gitlab.com/gitlab-org/cli) (`glab`) logged in, ym sets the project up:
+
+```sh
+ym repo create                       # private project as origin (from repo_url, or --host/--owner/--name), pushes the current branch
+ym ci setup                          # check-updates schedule + YM_UPDATE_TOKEN; with prod/staging targets also their environments, keys, protected v* tags, ci = true
+git commit -m "Deploy from GitLab CI" site.toml && git push    # only if ci setup set ci = true
+ym ci status                         # check all of it
+```
+
+Or by hand:
 
 1. Push the repo to a GitLab project and protect the tags `v*` (*Settings → Repository → Protected tags*), so protected variables reach release-tag pipelines.
 2. Create the environments `production` (target `prod`) and `staging` (every other target) under *Operate → Environments*.

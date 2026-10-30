@@ -4,6 +4,11 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-30
+
+### Changed
+- New sites pin yourls-manager `v0.9.0`, whose `ym repo create` and `ym ci setup|status` work on GitLab: the site README's "GitLab CI" section, the post-copy message and the `ci_deploy` question use them (the manual steps stay as an alternative), and on GitLab sites the `ci = true` comments in `site.toml` say GitLab CI instead of GitHub Actions.
+
 ## [0.8.0] - 2026-10-30
 
 GitLab CI hardening, tested end to end on gitlab.com. New sites still pin yourls-manager `v0.8.1`.

@@ -18,10 +18,11 @@
 #                   Package Registry and create a release linking them.
 {%- endif %}
 #
-# Setup (see "GitLab CI" in README.md): protect the tags v*; environments "production" and
-# "staging" with File-type variables DEPLOY_SSH_KEY (private key authorized on the host) and
-# DEPLOY_KNOWN_HOSTS (`ssh-keyscan -p <port> <host>`; verify the fingerprint); for
-# check-updates a masked variable YM_UPDATE_TOKEN (project access token, write_repository).
+# Setup: `ym repo create` and `ym ci setup` (see "GitLab CI" in README.md). By hand: protect
+# the tags v*; environments "production" and "staging" with File-type variables DEPLOY_SSH_KEY
+# (private key authorized on the host) and DEPLOY_KNOWN_HOSTS (`ssh-keyscan -p <port> <host>`;
+# verify the fingerprint); for check-updates a pipeline schedule and a masked variable
+# YM_UPDATE_TOKEN (project access token, write_repository).
 # Job image and runner: the variables below hold the defaults (YM_CI_IMAGE{% if gitlab_runner_tag %}, YM_RUNNER_TAG{% endif %});
 # a project CI/CD variable of the same name (Settings -> CI/CD -> Variables) overrides them.
 # Change the defaults with `ym template update --data gitlab_image=...`{% if gitlab_runner_tag %} or{% else %}; to require a

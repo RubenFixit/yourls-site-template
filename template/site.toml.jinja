@@ -139,9 +139,9 @@ out = "dist"                     # build output directory (gitignored)
 {{ c }}# url         = "{{ site_url }}"    # default: [site].url; used for install/upgrade checks and `ym verify`
 {{ c }}accept      = "release"             # only final release tags (`ym release`); "any" allows any commit
 {%- if ci_deploy %}
-{{ c }}ci          = true                  # deploy from GitHub Actions; set it up with `ym ci setup prod`
+{{ c }}ci          = true                  # deploy from {{ 'GitLab CI' if ci_provider == 'gitlab' else 'GitHub Actions' }}; set it up with `ym ci setup prod`
 {%- else %}
-{{ c }}# ci          = true                # deploy from GitHub Actions (`ym ci setup prod` sets this)
+{{ c }}# ci          = true                # deploy from {{ 'GitLab CI' if ci_provider == 'gitlab' else 'GitHub Actions' }} (`ym ci setup prod` sets this)
 {%- endif %}
 {%- else %}
 {{ c }}[deploy.targets.prod]
@@ -158,9 +158,9 @@ out = "dist"                     # build output directory (gitignored)
 {{ c }}# url         = "{{ site_url }}"    # default: [site].url; used by `ym verify`
 {{ c }}accept      = "release"             # only final release tags (`ym release`); "any" allows any commit
 {%- if ci_deploy %}
-{{ c }}ci          = true                  # deploy from GitHub Actions; set it up with `ym ci setup prod`
+{{ c }}ci          = true                  # deploy from {{ 'GitLab CI' if ci_provider == 'gitlab' else 'GitHub Actions' }}; set it up with `ym ci setup prod`
 {%- else %}
-{{ c }}# ci          = true                # deploy from GitHub Actions (`ym ci setup prod` sets this)
+{{ c }}# ci          = true                # deploy from {{ 'GitLab CI' if ci_provider == 'gitlab' else 'GitHub Actions' }} (`ym ci setup prod` sets this)
 {%- endif %}
 {%- endif %}
 #
@@ -168,7 +168,7 @@ out = "dist"                     # build output directory (gitignored)
 # [deploy.targets.staging]
 # (same keys as prod, with its own path / host and url)
 # accept      = "any"
-# ci          = true   # deploy it from GitHub Actions on -rc tags (`ym ci setup staging`)
+# ci          = true   # deploy it from {{ 'GitLab CI' if ci_provider == 'gitlab' else 'GitHub Actions' }} on -rc tags (`ym ci setup staging`)
 
 # [release]
 # push_markers = true   # also push the deployed/<target> branch ym moves after each deploy
