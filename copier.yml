@@ -5,6 +5,22 @@ _subdirectory: template
 _answers_file: .copier-answers.yml
 _templates_suffix: .jinja
 
+# CI files live at their real paths under template/; the answers exclude the ones the
+# site doesn't use, so `copier update --data ci_provider=...` removes the old ones.
+_exclude:
+  # Copier's defaults (setting _exclude replaces them)
+  - copier.yaml
+  - copier.yml
+  - "~*"
+  - "*.py[co]"
+  - __pycache__
+  - .git
+  - .DS_Store
+  - .svn
+  - "{% if ci_provider != 'github' %}.github{% endif %}"
+  - "{% if ci_provider != 'gitlab' %}.gitlab-ci.yml{% endif %}"
+  - "{% if ci_provider != 'github' or not release_artifact %}.github/workflows/publish.yml{% endif %}"
+
 # Site-owned files: rendered once on `copier copy`, never touched by `copier update`.
 # Everything else in template/ is template-owned and is 3-way merged on update.
 _skip_if_exists:
@@ -27,10 +43,11 @@ site_url:
   type: str
   help: >-
     Public base URL: https, lowercase, domain root, no trailing slash
-    (e.g. https://go.example.com). YOURLS must be installed at the domain root.
+    (e.g. https://go.example.com, or a single-label intranet host like https://goto).
+    YOURLS must be installed at the domain root.
   placeholder: https://go.example.com
   validator: >-
-    {% if not (site_url | regex_search('^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?$')) %}site_url must look like https://go.example.com (https, lowercase, no path, no trailing slash){% endif %}
+    {% if not (site_url | regex_search('^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$')) %}site_url must look like https://go.example.com or https://goto (https, lowercase, no path, no trailing slash){% endif %}
 
 site_slug:
   type: str
@@ -167,6 +184,28 @@ ci_deploy:
     README). No: deploy from your machine with `ym deploy prod`.
   default: false
   when: "{{ ci_provider != 'none' }}"
+
+gitlab_image:
+  type: str
+  help: >-
+    Container image for the GitLab CI jobs: needs uv, Python >= 3.11 and git, and
+    apt-get (the jobs install rsync and openssh-client). Written as the default of the
+    CI/CD variable YM_CI_IMAGE; a project variable of that name overrides it.
+  default: ghcr.io/astral-sh/uv:python3.13-bookworm
+  when: "{{ ci_provider == 'gitlab' }}"
+  validator: >-
+    {% if not (gitlab_image | regex_search('^[A-Za-z0-9][A-Za-z0-9._/:@-]*$')) %}gitlab_image must be an image reference like ghcr.io/astral-sh/uv:python3.13-bookworm{% endif %}
+
+gitlab_runner_tag:
+  type: str
+  help: >-
+    Runner tag the GitLab CI jobs require (e.g. docker). Leave empty to run on any
+    available runner, such as GitLab.com's instance runners. Written as the default of
+    the CI/CD variable YM_RUNNER_TAG; a project variable of that name overrides it.
+  default: ""
+  when: "{{ ci_provider == 'gitlab' }}"
+  validator: >-
+    {% if gitlab_runner_tag and not (gitlab_runner_tag | regex_search('^[A-Za-z0-9][A-Za-z0-9._:/-]*$')) %}gitlab_runner_tag must be a single tag (letters, digits, . _ : / -){% endif %}
 
 release_artifact:
   type: bool

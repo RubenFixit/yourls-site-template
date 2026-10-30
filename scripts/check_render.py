@@ -53,6 +53,23 @@ TARGET_KEYS = {
 RSYNC_ONLY_KEYS = {"php", "backup_dir", "backup_keep"}
 
 
+def check_gitlab_runner(path: Path, tag: str) -> list[str]:
+    """Image and runner tag come from the variables YM_CI_IMAGE / YM_RUNNER_TAG."""
+    lines = path.read_text("utf-8").splitlines()
+    errors = []
+    if "  image: $YM_CI_IMAGE" not in lines or not any(
+        re.fullmatch(r'  YM_CI_IMAGE: "[^"\s]+"', line) for line in lines
+    ):
+        errors.append(".gitlab-ci.yml: default image must be $YM_CI_IMAGE with a default value")
+    has_tags = "    - $YM_RUNNER_TAG" in lines
+    tag_var = [line for line in lines if line.startswith("  YM_RUNNER_TAG:")]
+    if tag and (not has_tags or tag_var != [f'  YM_RUNNER_TAG: "{tag}"']):
+        errors.append(f".gitlab-ci.yml: jobs should require runner tag {tag} via YM_RUNNER_TAG")
+    if not tag and (has_tags or tag_var):
+        errors.append(".gitlab-ci.yml: no runner tag expected")
+    return errors
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("site", type=Path)
@@ -63,6 +80,9 @@ def main() -> int:
     ap.add_argument("--expect-provider", choices=sorted(CI_FILES), default="github")
     ap.add_argument(
         "--expect-artifact", action="store_true", help="[artifact] enabled + a publish job"
+    )
+    ap.add_argument(
+        "--expect-runner-tag", default="", help="GitLab jobs require this runner tag"
     )
     args = ap.parse_args()
     root: Path = args.site
@@ -85,6 +105,7 @@ def main() -> int:
         publishes = "ym artifact build" in gitlab_ci.read_text("utf-8")
         if publishes is not args.expect_artifact:
             errors.append(f".gitlab-ci.yml: publish job present = {publishes}, expected {args.expect_artifact}")
+        errors += check_gitlab_runner(gitlab_ci, args.expect_runner_tag)
     for bad in ("dist", "yourls"):
         if (root / bad).exists():
             errors.append(f"unexpected path rendered: {bad}")

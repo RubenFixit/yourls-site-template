@@ -18,7 +18,7 @@ The complete site configuration lives in this repo. Secrets live only on the ser
 {%- if ci_provider == 'github' %}
 | `.github/` | template | GitHub Actions: deploy on tag, weekly update PRs{% if release_artifact %}, publish release artifacts{% endif %}; Dependabot. |
 {%- elif ci_provider == 'gitlab' %}
-| `.gitlab-ci.yml` | template | GitLab CI: deploy on tag, weekly update merge requests{% if release_artifact %}, publish release artifacts{% endif %}. |
+| `.gitlab-ci.yml` | template | GitLab CI: checks on merge requests and branch pushes, deploy on tag, weekly update merge requests{% if release_artifact %}, publish release artifacts{% endif %}. |
 {%- endif %}
 | `adopt-review/` | `ym adopt` | Only after adopting an existing install: report + files to merge by hand. Never deployed. |
 
@@ -189,7 +189,7 @@ Then pushing a release tag runs `.github/workflows/deploy.yml`: final tags deplo
 
 {% elif ci_provider == 'gitlab' %}### GitLab CI
 
-`.gitlab-ci.yml` runs yourls-manager in the `ghcr.io/astral-sh/uv` image (Docker executor). Deploys run from your machine until you opt a target in with `ci = true` in `site.toml`. `ym repo create` and `ym ci` are GitHub-only, so set GitLab up by hand:
+`.gitlab-ci.yml` runs yourls-manager in a container image (Docker executor; see below for the image and runner tag). Deploys run from your machine until you opt a target in with `ci = true` in `site.toml`. `ym repo create` and `ym ci` are GitHub-only, so set GitLab up by hand:
 
 1. Push the repo to a GitLab project and protect the tags `v*` (*Settings → Repository → Protected tags*), so protected variables reach release-tag pipelines.
 2. Create the environments `production` (target `prod`) and `staging` (every other target) under *Operate → Environments*.
@@ -197,7 +197,11 @@ Then pushing a release tag runs `.github/workflows/deploy.yml`: final tags deplo
    - `DEPLOY_SSH_KEY`: a private key (e.g. `ssh-keygen -t ed25519 -N "" -C ym-ci-{{ site_slug }}`) whose public half is in `~/.ssh/authorized_keys` on the host. Use a key only CI has.
    - `DEPLOY_KNOWN_HOSTS`: the host's keys, `ssh-keyscan -p <port> <host>`; compare the fingerprints with `ssh-keygen -lf` against a trusted source.
 4. Set `ci = true` on the target in `site.toml`, commit and push.
-5. Weekly updates: add a pipeline schedule (*Build → Pipeline schedules*) and a masked variable `YM_UPDATE_TOKEN` holding a project access token with the `write_repository` scope (Developer role). The `check-updates` job pushes `ym/upstream-updates` and opens a merge request.
+5. Weekly updates: add a pipeline schedule (*Build → Pipeline schedules*) and a masked variable `YM_UPDATE_TOKEN` holding a project access token with the `write_repository` scope (Developer role). The `check-updates` job pushes `ym/upstream-updates` and opens a merge request; later runs update that branch while the merge request is open, and leave it alone when it already has the same updates.
+
+The jobs run in `{{ gitlab_image }}`{% if gitlab_runner_tag %} on runners tagged `{{ gitlab_runner_tag }}`{% else %} on any available runner{% endif %}, set by the variables `YM_CI_IMAGE`{% if gitlab_runner_tag %} and `YM_RUNNER_TAG`{% endif %} in `.gitlab-ci.yml`. A project CI/CD variable of the same name overrides the value there; to change the defaults, run `ym template update --data gitlab_image=<image>` or `--data gitlab_runner_tag=<tag>` (an image needs uv, Python >= 3.11, git and apt-get).
+
+Merge requests, and pushes to branches without an open merge request, run the `check` job: `ym doctor --local` and `ym build`, so a broken `site.toml` or a `yourls/` tree that doesn't match `yourls.lock.json` fails before it is merged. To require it, turn on *Settings → Merge requests → Pipelines must succeed*.
 
 Pushing a release tag then deploys: final tags deploy `prod` in `production`, `-rc.<n>` tags deploy `staging` in `staging`. To deploy by hand from CI, run a pipeline (*Build → Pipelines → Run pipeline*) with the variable `TARGET=<name>`. Targets without `ci = true` are skipped with a message.
 

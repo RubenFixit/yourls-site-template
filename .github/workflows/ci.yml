@@ -57,11 +57,13 @@ jobs:
               --data deploy_host=example.dreamhost.com
               --data deploy_user=ruben
               --data ci_deploy=true
-            check: --expect-404-plugin --expect-target --expect-ci --expect-provider gitlab
+              --data gitlab_runner_tag=docker
+            check: --expect-404-plugin --expect-target --expect-ci --expect-provider gitlab --expect-runner-tag docker
           - name: gitlab-artifact-only
             data: >-
               --data site_name="App Backend"
-              --data site_url=https://links.example.dev
+              --data site_url=https://goto
+              --data site_slug=app-backend
               --data ci_provider=gitlab
               --data release_artifact=true
               --data repo_url=https://gitlab.example.com/team/links
@@ -96,13 +98,22 @@ jobs:
       - name: Check rendered site
         run: python3 scripts/check_render.py "$RUNNER_TEMP/site" ${{ matrix.check }}
 
-      - name: CI files are valid YAML
+      - name: CI files match their schemas
+        # check-jsonschema ships GitLab's and GitHub's published schemas (keys, rules,
+        # job options), so a misspelled key fails here instead of on the forge.
+        working-directory: ${{ runner.temp }}/site
         run: |
           shopt -s nullglob
-          for f in "$RUNNER_TEMP"/site/.gitlab-ci.yml "$RUNNER_TEMP"/site/.github/workflows/*.yml; do
-            uv run --no-project --with pyyaml python -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' "$f"
-            echo "ok: ${f#"$RUNNER_TEMP"/site/}"
-          done
+          if [ -f .gitlab-ci.yml ]; then
+            uvx check-jsonschema --builtin-schema vendor.gitlab-ci .gitlab-ci.yml
+          fi
+          workflows=(.github/workflows/*.yml)
+          if [ ${#workflows[@]} -gt 0 ]; then
+            uvx check-jsonschema --builtin-schema vendor.github-workflows "${workflows[@]}"
+          fi
+          if [ -f .github/dependabot.yml ]; then
+            uvx check-jsonschema --builtin-schema vendor.dependabot .github/dependabot.yml
+          fi
 
       - name: copier update is a clean no-op
         working-directory: ${{ runner.temp }}/site

@@ -1,6 +1,8 @@
 # Template-owned (yourls-site-template). GitLab CI for {{ site_name }}, run with yourls-manager.
 #
-# Jobs run only when their rules match; plain branch pushes start no pipeline.
+# Jobs run only when their rules match.
+#   check           merge requests, and branch pushes without an open merge request:
+#                   `ym doctor --local` and `ym build` (site.toml valid, yourls/ matches the lock).
 #   deploy-prod     final release tags v<yourls>-<rev> (`ym release --push`): `ym deploy prod`
 #                   in the "production" environment.
 #   deploy-staging  release candidates v<yourls>-<rev>-rc.<n>: `ym deploy staging` in "staging".
@@ -9,7 +11,8 @@
 #   Only targets with `ci = true` in site.toml are deployed; others are skipped with a notice.
 #   `ym deploy` enforces each target's `accept` policy (prod: final release tags only).
 #   check-updates   scheduled pipeline (Build -> Pipeline schedules, e.g. weekly):
-#                   `ym update --check`, then `ym update` and a merge request.
+#                   `ym update --check`, then `ym update` and a merge request (updated by
+#                   later runs while open; left alone when it already has the updates).
 {%- if release_artifact %}
 #   publish         every release tag: `ym artifact build`, upload the files to the Generic
 #                   Package Registry and create a release linking them.
@@ -19,13 +22,25 @@
 # "staging" with File-type variables DEPLOY_SSH_KEY (private key authorized on the host) and
 # DEPLOY_KNOWN_HOSTS (`ssh-keyscan -p <port> <host>`; verify the fingerprint); for
 # check-updates a masked variable YM_UPDATE_TOKEN (project access token, write_repository).
+# Job image and runner: the variables below hold the defaults (YM_CI_IMAGE{% if gitlab_runner_tag %}, YM_RUNNER_TAG{% endif %});
+# a project CI/CD variable of the same name (Settings -> CI/CD -> Variables) overrides them.
+# Change the defaults with `ym template update --data gitlab_image=...`{% if gitlab_runner_tag %} or{% else %}; to require a
+# runner tag, use{% endif %} `ym template update --data gitlab_runner_tag=...`.
 
-stages: [deploy, publish, maintenance]
+stages: [check, deploy, publish, maintenance]
 
 default:
-  image: ghcr.io/astral-sh/uv:python3.13-bookworm
+  image: $YM_CI_IMAGE
+{%- if gitlab_runner_tag %}
+  tags:
+    - $YM_RUNNER_TAG
+{%- endif %}
 
 variables:
+  YM_CI_IMAGE: "{{ gitlab_image }}"
+{%- if gitlab_runner_tag %}
+  YM_RUNNER_TAG: "{{ gitlab_runner_tag }}"
+{%- endif %}
   GIT_DEPTH: "0"  # full history and tags: ym checks the release tag at HEAD
   UV_LINK_MODE: copy
 
@@ -33,6 +48,22 @@ variables:
 .release-tags:
   final: &final-tag '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+(\.[0-9]+)?-[1-9][0-9]*$/'
   rc: &rc-tag '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+(\.[0-9]+)?-[1-9][0-9]*-rc\.[1-9][0-9]*$/'
+
+check:
+  stage: check
+  timeout: 20m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # a branch with an open merge request is checked by the merge request pipeline
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  script:
+    # doctor checks for rsync and ssh when site.toml has rsync targets
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends rsync openssh-client >/dev/null
+    - uv sync --locked
+    - uv run --locked ym doctor --local
+    - uv run --locked ym build
 
 .deploy:
   stage: deploy
@@ -173,11 +204,22 @@ check-updates:
       uv run --locked ym update --force
       git config user.name "ym check-updates"
       git config user.email "ym-check-updates@noreply.$CI_SERVER_HOST"
-      git checkout -q -B ym/upstream-updates
+      branch=ym/upstream-updates
+      git checkout -q -B "$branch"
       git add -A
       git commit -q -m "chore: update YOURLS core/plugins" -m "$(cat /tmp/check.txt)"
+      # A previous run already pushed exactly these files: leave the branch (and its merge
+      # request) alone instead of force-pushing an identical commit.
+      if git fetch -q origin "+refs/heads/$branch:refs/ym/previous" 2>/dev/null &&
+         [ "$(git rev-parse 'refs/ym/previous^{tree}')" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+        echo "$branch already has these updates; nothing to push"
+        echo "(if its merge request was closed without merging, delete the branch to get a new one)"
+        exit 0
+      fi
+      # Pushing to a branch whose merge request is still open updates that merge request
+      # (GitLab ignores the create options then, with a warning).
       url="${CI_REPOSITORY_URL/gitlab-ci-token:${CI_JOB_TOKEN}@/oauth2:${YM_UPDATE_TOKEN}@}"
-      git push --force "$url" HEAD:refs/heads/ym/upstream-updates \
+      git push --force "$url" "HEAD:refs/heads/$branch" \
         -o merge_request.create -o merge_request.target="$CI_DEFAULT_BRANCH" \
         -o merge_request.title="chore: update YOURLS core/plugins" \
         -o merge_request.label=dependencies -o merge_request.remove_source_branch

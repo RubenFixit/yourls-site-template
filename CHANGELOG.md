@@ -4,6 +4,16 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+### Added
+- GitLab CI: a `check` job (`ym doctor --local`, `ym build`) on merge requests and on pushes to branches without an open merge request.
+- GitLab CI: questions `gitlab_image` (default `ghcr.io/astral-sh/uv:python3.13-bookworm`, as before) and `gitlab_runner_tag` (default none). They become the defaults of the CI/CD variables `YM_CI_IMAGE` and `YM_RUNNER_TAG`, which project variables of the same name override.
+- Template CI validates the rendered `.gitlab-ci.yml`, GitHub workflows and `dependabot.yml` against the published schemas (`check-jsonschema`) instead of only parsing them as YAML.
+
+### Changed
+- `site_url` accepts single-label intranet hosts such as `https://goto` (ym already did).
+- GitLab `check-updates`: when `ym/upstream-updates` already holds the same files, the job leaves the branch and its merge request alone instead of force-pushing an identical commit.
+- The CI files live at their real paths (`template/.github/`, `template/.gitlab-ci.yml.jinja`) and `_exclude` in `copier.yml` leaves out the unused provider's files, instead of conditional file names. Rendered sites are unchanged.
+
 ## [0.7.1] - 2026-10-30
 
 ### Changed

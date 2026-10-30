@@ -20,7 +20,7 @@ The rest of this page is for people working on the template itself.
 - `copier.yml`: questions, validators, ownership rules and the post-copy message.
 - `template/`: the site files (`_subdirectory`). Files ending in `*.jinja` are rendered.
 - `scripts/check_render.py`: sanity checks for a rendered site (used by CI).
-- `.github/workflows/ci.yml`: renders the template with sample answers (rsync and sftp targets; GitHub, GitLab and no CI; with and without release artifacts), checks the output and that the CI files parse, verifies that `copier update` is a no-op, and switches `ci_provider` with `copier update --data`.
+- `.github/workflows/ci.yml`: renders the template with sample answers (rsync and sftp targets; GitHub, GitLab and no CI; with and without release artifacts), checks the output, validates the CI files against GitLab's and GitHub's published schemas (`check-jsonschema`), verifies that `copier update` is a no-op, and switches `ci_provider` with `copier update --data`.
 
 ### File ownership
 
@@ -62,7 +62,7 @@ python3 scripts/check_render.py /tmp/demo-gitlab --expect-404-plugin --expect-pr
 
 `deploy_type` (`rsync` or `sftp`) switches the prod target in `site.toml` and the deploy instructions in the generated README. Copier validates every question's default before it prompts, so a default must always pass its own validator (and `when:`-skipped questions must still have a valid default).
 
-**CI provider.** `ci_provider` (`github`, `gitlab`, `none`) picks the CI files through conditional names: `template/{% if ci_provider == 'github' %}.github{% endif %}/...` and `template/{% if ci_provider == 'gitlab' %}.gitlab-ci.yml{% endif %}.jinja` render to nothing for the other answers, so Copier never writes the unused files, and `copier update --data ci_provider=...` (`ym template update --data ...`) removes the old ones. Keep the jobs of both providers equivalent: `deploy` (release tags, only `ci = true` targets), `check-updates` and, with `release_artifact`, `publish` (`ym artifact build`, then a GitHub release or GitLab's Generic Package Registry + release). `release_artifact` also writes `[artifact]` to `site.toml`, active or commented out.
+**CI provider.** `ci_provider` (`github`, `gitlab`, `none`) picks the CI files. They live at their real paths, `template/.github/` and `template/.gitlab-ci.yml.jinja`, and `_exclude` in `copier.yml` leaves out the ones the answers don't use (patterns there match the rendered path, without `.jinja`), so Copier never writes the unused files and `copier update --data ci_provider=...` (`ym template update --data ...`) removes the old ones. Keep the jobs of both providers equivalent: `deploy` (release tags, only `ci = true` targets), `check-updates` and, with `release_artifact`, `publish` (`ym artifact build`, then a GitHub release or GitLab's Generic Package Registry + release). `release_artifact` also writes `[artifact]` to `site.toml`, active or commented out.
 
 Copier renders from Git. `--vcs-ref HEAD` includes uncommitted changes. To test through the tool, run `ym new /tmp/demo-site --template . --vcs-ref HEAD`.
 
