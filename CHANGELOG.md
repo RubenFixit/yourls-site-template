@@ -4,6 +4,11 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-30
+
+### Changed
+- New sites pin yourls-manager `v0.9.1`: `ym core`, `ym plugin sync` and `ym doctor` warn about vendored files that `.gitignore` keeps out of Git, and `ym plugin add` / `ym plugin remove` keep the `[[plugins]]` list in `site.toml` together. Existing sites: `ym template update --manager-version v0.9.1`.
+
 ## [0.8.1] - 2026-10-30
 
 ### Changed
