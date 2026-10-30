@@ -4,6 +4,11 @@ All notable changes to this template. Sites pick them up with `ym template updat
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-30
+
+### Changed
+- New sites pin yourls-manager `v0.8.1`.
+
 ## [0.7.0] - 2026-10-29
 
 ### Added
